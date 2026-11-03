@@ -1,0 +1,30 @@
+Options -Indexes
+DirectoryIndex index.html
+
+# Required modules: fail closed instead of silently serving an HTTP checkout.
+# Canonical authority is deployment configuration; never reflect an untrusted Host.
+RewriteEngine On
+# Only the listed shop hosts may be redirect targets; www goes to the apex host.
+RewriteCond %{HTTP_HOST} ^www\.shop\.example\.com$ [NC]
+RewriteRule ^ https://shop.example.com%{REQUEST_URI} [R=308,L]
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP_HOST} ^(shop\.example\.com|staging\.shop\.example\.com)$ [NC]
+RewriteRule ^ https://%1%{REQUEST_URI} [R=308,L]
+# Plain HTTP for any other Host has no trusted authority to redirect to.
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ - [F]
+
+
+# Only the four reviewed API entry points may be requested directly.
+<FilesMatch "^(?!(?:order|status|webhook|panel)\.php$).*\.php$">
+  Require all denied
+</FilesMatch>
+
+
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "no-referrer"
+  # Short host-wide HSTS; deliberately no includeSubDomains or preload.
+  Header always set Strict-Transport-Security "max-age=86400" "expr=%{HTTPS} == 'on'"
+  Header always set X-Robots-Tag "noindex, nofollow"
+  # Paymove modal (iframe + sdk.js) and the InPost Geowidget map need their hosts.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://checkout.paymove.io https://checkout.sandbox.paymove.io https://geowidget.inpost.pl https://sandbox-easy-geowidget-sdk.easypack24.net; style-src 'self' 'unsafe-inline' https://geowidget.inpost.pl https://sandbox-easy-geowidget-sdk.easypack24.net; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-src https://checkout.paymove.io https://checkout.sandbox.paymove.io https://geowidget-app.inpost.pl https://sandbox-geowidget-app.easypack24.net; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pl" data-offer="masaz-60">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Twój voucher — Voucher na masaż</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="assets/shop.css?v=10">
+</head>
+<body class="voucher-page">
+<header class="site-header no-print">
+  <div class="wrap"><a class="brand" href="./">Voucher na masaż</a><div class="header-end"><button type="button" class="btn btn-sm" id="print" hidden>Drukuj</button></div></div>
+</header>
+<main class="wrap narrow print-sheet">
+  <div class="vouchers" id="vouchers" aria-live="polite"><p class="muted">Wczytuję voucher…</p></div>
+  <div class="thanks-wait" id="wait" hidden>
+    <h1 id="wait-title"></h1>
+    <p class="lead muted" id="wait-text"></p>
+  </div>
+</main>
+<template id="voucher-template">
+  <article class="voucher-card printable">
+    <span class="v-kind"></span>
+    <span class="v-demo" hidden>DEMO — voucher przykładowy, nie uprawnia do usługi</span>
+    <span class="v-product"></span>
+    <span class="v-for"></span>
+    <span class="v-dedication"></span>
+    <span class="v-code-row"><span class="v-code-label"></span><span class="v-code"></span></span>
+    <span class="v-valid"></span>
+    <span class="v-how"></span>
+    <span class="v-seller"></span>
+  </article>
+</template>
+<script src="assets/i18n.js?v=4"></script>
+<script src="assets/voucher.js?v=2"></script>
+</body>
+</html>

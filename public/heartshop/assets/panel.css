@@ -1,0 +1,67 @@
+/* Seller's panel: the shop's tokens, quieter. Built phone-first: vouchers get redeemed at the massage table. */
+.panel .site-header .wrap { min-height: 68px; }
+.panel .brand { font-size: 21px; }
+.panel-main { padding: 28px 0 64px; }
+.login { max-width: 380px; margin: 8vh auto 0; }
+.login h1 { font-size: 44px; }
+.login-form { display: grid; gap: 16px; margin-top: 26px; }
+.login .btn { background: var(--night); color: var(--white); }
+
+.redeem { background: var(--panel); border-radius: 12px; padding: 18px; }
+.redeem-row { display: flex; gap: 10px; }
+.redeem-row input { font: 600 18px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .06em; text-transform: uppercase; }
+.redeem-row .btn { flex: none; min-height: 50px; background: var(--night); color: var(--white); }
+.redeem-result { margin: 12px 0 0; font-size: 14px; }
+.link { border: 0; background: none; padding: 0 0 0 10px; color: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+.filters { display: grid; gap: 12px; margin: 26px 0 18px; }
+.views { display: flex; flex-wrap: wrap; gap: 8px; }
+.view { min-height: 40px; padding: 0 14px; border: 1px solid var(--field); border-radius: 999px; background: var(--white); color: var(--ink); font-size: 14px; cursor: pointer; }
+.view.active { background: var(--night); border-color: var(--night); color: var(--white); }
+.view .count { margin-left: 7px; font-variant-numeric: tabular-nums; opacity: .7; }
+.filter-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+.filter-row input, .filter-row select, .redeem-row input {
+  width: 100%; min-width: 0; min-height: 50px; padding: 0 14px; border: 1px solid var(--field); border-radius: 6px;
+  background: var(--white); color: var(--ink); font-size: 16px;
+}
+
+.orders { display: grid; gap: 12px; }
+.order { background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 12px; }
+.order.done { opacity: .72; }
+.order.status-review { border-color: #e2b46b; }
+.order p { margin: 0; }
+.order-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.order-number { font-weight: 600; font-variant-numeric: tabular-nums; }
+.order-date { font-size: 13px; }
+.order-total { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+.order-product { font-family: var(--display); font-size: 20px; letter-spacing: -.02em; }
+.order-body { display: grid; gap: 10px 24px; font-size: 14px; }
+@media (min-width: 720px) { .order-body { grid-template-columns: 1fr 1.2fr; } }
+.contact { display: flex; flex-direction: column; gap: 2px; }
+.contact a { color: var(--dim); text-decoration: none; overflow-wrap: anywhere; }
+.contact a:hover { text-decoration: underline; }
+.dedication { font-style: italic; }
+.pill { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--panel); color: var(--dim); }
+.pill.paid { background: #dfe9e3; color: #315844; }
+.pill.review { background: #faefd9; color: #7a5420; }
+.codes { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.code { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 6px 6px 12px; border-radius: 8px; background: #faefd9; }
+.code.used { background: var(--panel); }
+.code.used .code-value { text-decoration: line-through; color: var(--dim); }
+.code.expired { background: #f3e1dd; }
+.code-value { font: 600 15px/1.2 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .06em; }
+.code-state { font-size: 12px; color: var(--dim); flex: 1; }
+.code .btn-sm { min-height: 36px; background: var(--white); }
+.invoice { padding: 12px; border-radius: 8px; background: var(--paper); font-size: 14px; display: grid; gap: 2px; }
+.order-foot { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); }
+.order-foot .check { font-size: 14px; }
+.note { width: 100%; min-height: 40px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 14px; resize: vertical; background: var(--paper); }
+.empty { padding: 30px 0; text-align: center; }
+
+@media (max-width: 640px) {
+  .redeem-row { flex-direction: column; }
+  .filter-row { grid-template-columns: 1fr 1fr; }
+  .filter-row input { grid-column: 1 / -1; }
+  .order-foot { grid-template-columns: 1fr; }
+  .panel .header-end .btn-sm { padding: 0 10px; }
+}

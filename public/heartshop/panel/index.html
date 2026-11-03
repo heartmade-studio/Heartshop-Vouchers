@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zamówienia — panel sklepu</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="../assets/shop.css?v=10">
+<link rel="stylesheet" href="../assets/panel.css?v=1">
+</head>
+<body class="panel">
+<div class="demo-banner" id="demo-banner" hidden>Tryb testowy — zamówienia z sandboxa, bez prawdziwych płatności.</div>
+
+<header class="site-header">
+  <div class="wrap">
+    <span class="brand" id="shop-name">Panel sklepu</span>
+    <div class="header-end" id="session-actions" hidden>
+      <a class="btn btn-ghost btn-sm" href="../api/panel.php?action=export" id="export">Pobierz CSV</a>
+      <button type="button" class="btn btn-ghost btn-sm" id="logout">Wyloguj</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap panel-main">
+  <section id="login" class="login" hidden>
+    <h1>Zamówienia</h1>
+    <form id="login-form" class="login-form" novalidate>
+      <div class="field">
+        <label for="password">Hasło do panelu</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="form-alert" id="login-alert" role="alert" hidden></div>
+      <button class="btn btn-block" type="submit" id="login-button">Zaloguj</button>
+    </form>
+  </section>
+
+  <section id="app" hidden>
+    <form class="redeem" id="redeem-form" novalidate>
+      <div class="field">
+        <label for="redeem-code">Realizacja vouchera</label>
+        <div class="redeem-row">
+          <input id="redeem-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="np. K7PM-4QXT" maxlength="12">
+          <button class="btn btn-sm" type="submit">Oznacz jako wykorzystany</button>
+        </div>
+      </div>
+      <p class="redeem-result" id="redeem-result" role="status" hidden></p>
+    </form>
+
+    <div class="filters">
+      <div class="views" role="group" aria-label="Które zamówienia" id="views"></div>
+      <div class="filter-row">
+        <input type="search" id="search" placeholder="Szukaj: nazwisko, e-mail, numer, kod" aria-label="Szukaj">
+        <select id="type" aria-label="Rodzaj">
+          <option value="">Wszystko</option>
+
+          <option value="voucher">Vouchery</option>
+        </select>
+        <select id="sort" aria-label="Kolejność">
+          <option value="new">Najnowsze</option>
+          <option value="old">Najstarsze</option>
+          <option value="amount">Największa kwota</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-alert" id="app-alert" role="alert" hidden></div>
+    <p class="muted empty" id="empty" hidden>Nic tu nie ma.</p>
+    <div class="orders" id="orders"></div>
+  </section>
+</main>
+<script src="../assets/panel.js?v=1"></script>
+</body>
+</html>

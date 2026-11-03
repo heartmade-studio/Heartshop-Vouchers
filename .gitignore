@@ -1,0 +1,9 @@
+/private/
+/var/
+.env
+.env.*
+*.sqlite
+*.sqlite-*
+*.log
+.DS_Store
+/node_modules/

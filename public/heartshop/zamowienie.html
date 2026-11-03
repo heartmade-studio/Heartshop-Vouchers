@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="pl" data-offer="masaz-60">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zamówienie — Voucher na masaż</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="assets/shop.css?v=10">
+</head>
+<body>
+<div class="demo-banner" id="demo-banner" hidden>Tryb testowy — zapłać BLIK-iem z kodem 777123, płatność nie zostanie pobrana.</div>
+
+<header class="site-header">
+  <div class="wrap"><a class="brand" href="./">Voucher na masaż</a><div class="header-end"><span class="badge secure">Bezpieczne zamówienie</span></div></div>
+</header>
+
+<main class="checkout">
+  <div class="wrap">
+    <a class="back" href="./">← Wróć do vouchera</a>
+    <p class="demo-context">Sklep demonstracyjny — przykładowe zamówienie, bez rzeczywistego produktu lub usługi.</p>
+    <h1>Twoje zamówienie</h1>
+    <p class="muted">Dwa kroki: dane i płatność. Voucher zobaczysz od razu po zapłacie.</p>
+
+    <div class="layout">
+      <aside class="summary" aria-label="Podsumowanie zamówienia">
+        <div class="sum-product">
+          <div class="product-line">
+            <span class="thumb voucher-thumb" aria-hidden="true"></span>
+            <div class="body">
+              <div class="name" id="p-name">Masaż relaksacyjny 60 min</div>
+              <div class="variant" id="p-variant"></div>
+            </div>
+            <div class="price-each" id="p-price"></div>
+          </div>
+          <div class="qty-row">
+            <span id="qty-label">Liczba voucherów</span>
+            <div class="stepper" role="group" aria-labelledby="qty-label">
+              <button type="button" id="qty-minus" aria-label="Mniej">−</button>
+              <output id="qty" aria-live="polite">1</output>
+              <button type="button" id="qty-plus" aria-label="Więcej">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sum-pay">
+          <div class="totals">
+            <div><span>Vouchery</span><span id="t-items">—</span></div>
+            <div class="grand"><span>Do zapłaty</span><span id="t-total">—</span></div>
+          </div>
+          <div class="form-alert" id="form-alert" role="alert" hidden></div>
+          <button class="btn btn-block" id="pay" type="submit" form="order">Kupuję i płacę</button>
+          <p class="pay-note">Płatność otworzy się w okienku na tej stronie.</p>
+          <div class="methods" id="methods"></div>
+        </div>
+      </aside>
+
+      <form class="form" id="order" novalidate>
+        <fieldset class="fieldset">
+          <legend>Twoje dane</legend>
+          <div class="grid grid-2">
+            <div class="field" data-field="name">
+              <label for="name">Imię i nazwisko</label>
+              <input id="name" name="name" autocomplete="name" required>
+              <div class="error"></div>
+            </div>
+            <div class="field" data-field="email">
+              <label for="email">E-mail</label>
+              <input id="email" name="email" type="email" autocomplete="email" inputmode="email" required>
+              <div class="hint">Tu wyślemy kod vouchera.</div>
+              <div class="error"></div>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend>Na voucherze</legend>
+          <div class="grid">
+            <div class="field" data-field="recipient">
+              <label for="recipient">Dla kogo <span class="muted">(nieobowiązkowe)</span></label>
+              <input id="recipient" name="recipient" maxlength="60" autocomplete="off" placeholder="np. Ani">
+              <div class="hint">Wpiszemy to na voucherze do wydruku.</div>
+              <div class="error"></div>
+            </div>
+            <div class="field" data-field="dedication">
+              <label for="dedication">Dedykacja <span class="muted">(nieobowiązkowe)</span></label>
+              <textarea id="dedication" name="dedication" maxlength="200" rows="3" placeholder="np. Na spokojny wieczór tylko dla Ciebie."></textarea>
+              <div class="error"></div>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="fieldset" id="invoice-set">
+          <legend>Zgody</legend>
+          <label class="check" id="invoice-toggle"><input type="checkbox" id="invoice" name="invoice"> <span>Potrzebuję faktury na firmę</span></label>
+          <div class="reveal" id="reveal-invoice" hidden>
+            <div class="grid">
+              <div class="grid grid-2">
+                <div class="field" data-field="company">
+                  <label for="company">Nazwa firmy</label>
+                  <input id="company" name="company" autocomplete="organization" maxlength="100">
+                  <div class="error"></div>
+                </div>
+                <div class="field" data-field="nip">
+                  <label for="nip">NIP</label>
+                  <input id="nip" name="nip" inputmode="numeric" placeholder="1234567890" maxlength="13">
+                  <div class="error"></div>
+                </div>
+              </div>
+              <div class="field" data-field="company_address">
+                <label for="company_address">Adres firmy</label>
+                <input id="company_address" name="company_address" placeholder="ul. Przykładowa 1, 00-000 Miasto">
+                <div class="error"></div>
+              </div>
+            </div>
+          </div>
+          <div class="check-wrap" data-field="terms" style="margin-top:18px">
+            <label class="check"><input type="checkbox" id="terms" name="terms"> <span>Akceptuję <a href="regulamin.html" target="_blank">regulamin</a> i <a href="polityka-prywatnosci.html" target="_blank">politykę prywatności</a>.</span></label>
+            <div class="error"></div>
+          </div>
+        </fieldset>
+      </form>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Sklep demonstracyjny Heartmade</span>
+    <nav><a href="regulamin.html">Regulamin</a><a href="polityka-prywatnosci.html">Polityka prywatności</a></nav>
+  </div>
+</footer>
+<script src="assets/i18n.js?v=4"></script>
+<script src="assets/attempt.js?v=3"></script>
+<script src="assets/checkout.js?v=10"></script>
+</body>
+</html>
