@@ -1,0 +1,8 @@
+Options -Indexes
+RewriteEngine On
+# Relative redirect: the shop then enforces its configured HTTPS authority.
+RewriteRule ^$ /heartshop/ [R=308,L]
+# Crawlers must be allowed to read noindex; robots.txt is not access control.
+<FilesMatch "^(robots\.txt|sitemap\.xml)$">
+  Header always set X-Robots-Tag "noindex, nofollow"
+</FilesMatch>

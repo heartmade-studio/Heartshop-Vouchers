@@ -5,6 +5,8 @@ for file in public/heartshop/api/*.php scripts/heartshop/*.php scripts/dev/*.php
   php -l "$file"
 done
 for file in public/heartshop/assets/*.js scripts/dev/*.js; do node --check "$file"; done
+php scripts/heartshop/build-storefront.php --check
+python3 tests/heartshop/indexing.py
 python3 tests/heartshop/core.py
 python3 tests/heartshop/standalone.py
 git diff --check

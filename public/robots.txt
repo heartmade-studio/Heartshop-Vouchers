@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+# Demo: pages carry noindex in HTTP headers and HTML; do not block crawling.

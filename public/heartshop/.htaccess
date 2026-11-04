@@ -25,6 +25,8 @@ RewriteRule ^ - [F]
   Header always set Referrer-Policy "no-referrer"
   # Short host-wide HSTS; deliberately no includeSubDomains or preload.
   Header always set Strict-Transport-Security "max-age=86400" "expr=%{HTTPS} == 'on'"
+# BEGIN GENERATED INDEXING
   Header always set X-Robots-Tag "noindex, nofollow"
-  # Paymove modal (iframe + sdk.js) and the InPost Geowidget map need their hosts.
-  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://checkout.paymove.io https://checkout.sandbox.paymove.io https://geowidget.inpost.pl https://sandbox-easy-geowidget-sdk.easypack24.net; style-src 'self' 'unsafe-inline' https://geowidget.inpost.pl https://sandbox-easy-geowidget-sdk.easypack24.net; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-src https://checkout.paymove.io https://checkout.sandbox.paymove.io https://geowidget-app.inpost.pl https://sandbox-geowidget-app.easypack24.net; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+# END GENERATED INDEXING
+  # PAYMOVE checkout only; this edition has no shipping map.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://checkout.paymove.io https://checkout.sandbox.paymove.io; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-src https://checkout.paymove.io https://checkout.sandbox.paymove.io; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"

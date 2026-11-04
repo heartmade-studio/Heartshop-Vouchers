@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Distribution smoke tests: actual defaults, isolated checkout and production gates."""
-import json, os, shutil, socket, subprocess, tempfile, time, urllib.request, urllib.error
+import json, os, shutil, socket, sqlite3, subprocess, tempfile, time, urllib.request, urllib.error
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 KIND=(ROOT/'config/distribution').read_text().strip()
@@ -55,6 +55,13 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         assert status['status']=='paid' and status['demo'] is True and status['type']==typ
         if KIND=='vouchers':
             assert len(status['vouchers'])==1
+            with sqlite3.connect(repo/'var/local/orders.sqlite') as db:
+                snap=json.loads(db.execute('SELECT data FROM orders WHERE external_id=?',(order['orderId'],)).fetchone()[0])['snapshot']
+                body=db.execute('SELECT body FROM mail_outbox WHERE recipient=?',('buyer@example.invalid',)).fetchone()[0]
+                assert snap['invoice_request_text'] in body and 'Faktura na żądanie' in body
+            cfgfile=repo/'public/heartshop/api/config.php'
+            cfgfile.write_text(cfgfile.read_text().replace('Faktura na żądanie:', 'ZMIENIONA instrukcja:'))
+
             assert request('/heartshop/twoj-voucher.html?o='+order['orderId'])[0]==200
         else:
             assert request('/heartshop/api/furgonetka/orders',headers={'Authorization':'f'*32})[1]==[]
@@ -63,6 +70,13 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         code,orders,_=request('/heartshop/api/panel.php?action=orders',headers={'Cookie':cookie});assert code==200 and len(orders['orders'])==1
         if KIND=='vouchers':
             code,_,_=request('/heartshop/api/panel.php?action=redeem',{'code':status['vouchers'][0]['code']},{'Cookie':cookie});assert code==200
+
+        if KIND=='vouchers':
+            assert request('/heartshop/api/panel.php?action=resend',{'id':order['orderId']},{'Cookie':cookie})[0]==200
+            with sqlite3.connect(repo/'var/local/orders.sqlite') as db:
+                bodies=[r[0] for r in db.execute('SELECT body FROM mail_outbox WHERE recipient=?',('buyer@example.invalid',))]
+                assert all('Faktura na żądanie:' in body and 'ZMIENIONA instrukcja:' not in body for body in bodies)
+            print('PASS invoice request: checkout snapshot, queued buyer email and resend preserve instructions')
         assert request('/__dev/paymove.js')[0]==200
         print('PASS actual '+KIND+' distribution: start, boundaries, order, idempotency, simulation, panel and fulfillment isolation')
     finally:

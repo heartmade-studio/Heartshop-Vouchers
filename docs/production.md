@@ -23,7 +23,7 @@ Edit the private `.env` with your credentials and the generated password-hash li
 
 1. Replace example hostnames in `public/heartshop/.htaccess` and `public/heartshop/api/config.php`. Set the identical HTTPS `SHOP_ORIGIN` in private `.env`. `HEARTSHOP_ORIGIN` is an optional server-side allowlist override used by the local launcher; never derive it from a request header. Remove it in production unless intentionally configured.
 2. Edit offers, prices (integer grosze), tax settings, seller and order prefix in `config.php`. Preserve IDs/prefix after sales start. `masaz-60` is the sample service voucher. Set `default_offer` consistently; only voucher offers are accepted. A new offer needs its own matching HTML `data-offer` and paths.
-3. Replace sample product/seller/contact copy, images and all demo text in the Polish HTML, including voucher/confirmation pages. Replace legal placeholders with your reviewed terms and privacy notice and set `terms_version`. The included documents are samples, not your merchant policy. Review robots/noindex deliberately if indexing is wanted; status, checkout and panel should remain private from indexing.
+3. Replace sample product/seller/contact copy, images and all demo text in the Polish HTML, including voucher/confirmation pages. Replace legal placeholders with your reviewed terms and privacy notice and set `terms_version`. The included documents are samples, not your merchant policy. Use the single indexing switch and build workflow in [indexing](indexing.md); do not edit the HTML/meta and Apache rules separately.
 4. Keep `PAYMOVE_ENV=sandbox` while configuring credentials, product and webhook. Use [integration contracts](integrations.md). No production keys belong in Git, browser code, issues or logs.
 5. For offers representing actual goods/services, set their `demo` field to `false`. Old orders retain their original demo snapshot. Invoice issuance is unimplemented and must be arranged outside this project; do not enable invoice collection without first implementing that process. Set `production_ready` to `true` only after the content and checks below are complete; then switch to your live PAYMOVE environment and credentials as a deliberate operator action.
 
@@ -53,3 +53,36 @@ Run `bash scripts/heartshop/check.sh`, then exercise your HTTPS sandbox installa
 Finally perform an explicitly authorized small live transaction and its operational handling before announcing the merchant shop as live-verified. This repository's initial extraction did not perform real payments, shipment purchases, invoice issuance or outbound mail.
 
 `review` and uncertain attempts require reconciliation against PAYMOVE; do not mark paid by editing SQLite without a reviewed recovery procedure. Refunds and double payments after a late completion are manual merchant operations. Inventory is not reserved or tracked by Heartshop.
+
+## Build and hosting acceptance
+
+Follow [merchant indexing](indexing.md) and run the storefront builder and
+`--check` after changing configuration, prices or invoice instructions. Publish
+PHP config, generated HTML, root `.htaccess`, robots and sitemap atomically.
+Root `/` redirects to `/heartshop/`. Test both roots and the Host/TLS noindex guard.
+See [hosting options](hosting.md) for the open hosting/operator decision and the
+production HSTS recommendation in [indexing](indexing.md).
+
+## Manual invoice and voucher terms review
+
+Set `invoice_request_text` in `api/config.php` to the seller-approved instruction:
+how to contact the seller, which order reference to quote, and how required
+invoice details are supplied to the seller. The default suggests replying to the
+order email, whose Reply-To is `MERCHANT_EMAIL`. Test that the mailbox is monitored.
+The builder uses this text in FAQ and the terms template; checkout freezes it in
+the order snapshot and the queued buyer email uses that snapshot on resend too.
+Old orders without this field do not inherit a new promise. The code collects no
+invoice details and issues no invoice; `invoice` must remain `false`.
+
+The voucher terms are a template for review, not legal advice. Complete the
+placeholders for validity, redemption, transferability, non-cash-exchangeability,
+appointment cancellation and withdrawal from the service/voucher purchase.
+Check consistency with `valid_months`, actual service delivery and the seller's
+booking process. Do not interpret “no cash exchange” as a legal conclusion about
+statutory rights. No booking system or automatic refund is implemented.
+
+**Consult your accountant: fiscal-receipt obligation and VAT treatment of
+single-purpose vouchers.** Ask which treatment fits this actual voucher and
+seller, including the timing of tax recognition; do not infer it from the example
+`tax_rate=23`. Also obtain legal review of service withdrawal/cancellation text.
+These are questions to resolve before launch, not conclusions supplied by the code.

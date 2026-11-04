@@ -18,9 +18,6 @@ try {
             'invoice'          => $c['invoice'],
             'sandbox'          => $h['sandbox'],
             'paymoveSdk'       => 'https://' . $h['checkout'] . '/v1/sdk.js',
-            // Public by design: the Geowidget token is bound to the shop's domain.
-            'geowidgetToken'   => secrets()['INPOST_GEOWIDGET_TOKEN'] ?? '',
-            'geowidgetSandbox' => (secrets()['INPOST_GEOWIDGET_ENV'] ?? 'production') === 'sandbox',
         ]);
     }
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonOut(['error' => 'Method not allowed'], 405);

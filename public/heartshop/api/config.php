@@ -13,6 +13,21 @@ return [
     ],
     // Enable only after completing docs/production.md and replacing all sample content.
     'production_ready' => false,
+    // One indexing switch. Rebuild with php scripts/heartshop/build-storefront.php.
+    // Keep false for demos/staging. See docs/indexing.md before enabling.
+    'indexing' => [
+        'enabled' => false,
+        'origin' => 'https://shop.example.com',
+        'description' => [
+            'pl' => 'Przykładowa oferta sklepu Heartshop. Lokalna symulacja, bez prawdziwej sprzedaży.',
+            'en' => 'Example Heartshop offer. Local simulation without real sales.',
+        ],
+        // Only approved public facts; rendered visibly as well as in structured data.
+        'seller_type' => 'ProfessionalService', // Vouchers: LocalBusiness or ProfessionalService
+        'seller_address' => '', // Public business address, if approved for publication.
+    ],
+    'invoice_request_text' => 'Faktura na żądanie: odpowiedz na wiadomość z potwierdzeniem zamówienia i podaj numer zamówienia. Sprzedawca uzgodni z Tobą dane i ręcznie wystawi fakturę poza sklepem. To przykładowa instrukcja do zatwierdzenia przez sprzedawcę.',
+
     'product_type' => 'voucher',
     'terms_version' => 'demo-2026-11-03', // Change only with reviewed legal document version.
     // What the shop sells. Each offer has its own pages in <base>/<path> (zamowienie.html, dziekujemy.html).
