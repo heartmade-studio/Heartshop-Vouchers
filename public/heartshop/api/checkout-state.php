@@ -20,7 +20,8 @@ function makeSnapshot(array $order, array $config): array {
     ];
     if ($offer['type'] === 'voucher') {
         return $snapshot + ['delivery'=>'', 'delivery_label'=>null, 'delivery_eta'=>null, 'shipping'=>0,
-            'total'=>$items, 'valid_months'=>$offer['valid_months']];
+            'total'=>$items, 'valid_months'=>$offer['valid_months'],
+            'invoice_request_text'=>(string)($config['invoice_request_text'] ?? '')];
     }
     $shipping = $config['delivery'][$order['delivery']]['price'];
     if ($config['free_shipping_from'] !== null && $items >= $config['free_shipping_from']) $shipping = 0;
@@ -66,7 +67,7 @@ function prepareCheckout(array $input, string $key, ?callable $provider = null, 
     if ($prior !== null) return $prior;
     [$order,$errors]=validateOrder($input);
     if ($errors) throw new CheckoutProblem(422,'validation','Sprawdź dane zamówienia.',null,$errors);
-    if (!paymoveHosts()['sandbox'] && (!(cfg()['production_ready'] ?? false) || (offer($order['offer'])['demo'] ?? true))) {
+    if (!paymoveHosts()['sandbox'] && (!(cfg()['production_ready'] ?? false) || (offer($order['offer'])['demo'] ?? true) || invoiceTextNeedsApproval(cfg()))) {
         throw new CheckoutProblem(503,'demo_only','Ta oferta demonstracyjna jest dostępna tylko w trybie testowym.');
     }
     $order['snapshot']=makeSnapshot($order,cfg());
@@ -132,33 +133,4 @@ function consumeLimits(array $limits, ?int $now=null): bool {
         }
         $db->exec('COMMIT');return true;
     } catch(Throwable $e) { $db->exec('ROLLBACK');throw $e; }
-}
-
-function furgonetkaOrder(array $row): array {
-    $d=$row['data'];$snapshot=$d['snapshot']??null;
-    if (!is_array($snapshot)) throw new LegacyOrderException('Legacy order needs historical reconciliation');
-    $tz=new DateTimeZone('Europe/Warsaw');
-    $iso=static fn($ts)=>(new DateTimeImmutable('@'.(int)$ts))->setTimezone($tz)->format('Y-m-d\TH:i:s');
-    [$first,$last]=array_pad(explode(' ',$d['name'],2),2,'');
-    $invoice=null;
-    if ($d['invoice']) {
-        $address=parseCompanyAddress($d['company_address']) ?? ['street'=>$d['company_address'],'postcode'=>'','city'=>''];
-        $invoice=['company'=>$d['company'],'nip'=>$d['nip'],...$address,
-            'countryCode'=>'PL','phone'=>$d['phone'],'email'=>$d['email']];
-    }
-    return [
-        'sourceOrderId'=>$row['number'], 'datetimeOrder'=>$iso($row['created_at']),
-        'sourceDatetimeChange'=>$iso(max((int)$row['paid_at'],(int)($row['tracking_at']??0))),
-        'service'=>$d['delivery']==='paczkomat'?'inpost':'inpostkurier',
-        'serviceDescription'=>$snapshot['delivery_label'], 'status'=>'paid',
-        'totalPrice'=>$row['total']/100,'shippingCost'=>$snapshot['shipping']/100,
-        'shippingTaxRate'=>$snapshot['tax_rate']??null,'totalPaid'=>$row['total']/100,'codAmount'=>0,
-        'point'=>$d['delivery']==='paczkomat'?$d['point']:null,
-        'shippingAddress'=>['name'=>$first,'surname'=>$last,'street'=>$d['street'],
-            'postcode'=>$d['postcode'],'city'=>$d['city'],'countryCode'=>'PL','phone'=>$d['phone'],'email'=>$d['email']],
-        'invoiceAddress'=>$invoice,
-        'products'=>[['sourceProductId'=>$snapshot['product_id'],'name'=>$snapshot['name'],
-            'priceGross'=>$snapshot['unit_price']/100,'taxRate'=>$snapshot['tax_rate']??null,'quantity'=>$snapshot['qty'],'unit'=>'szt.']],
-        'paymentDatetime'=>$iso($row['paid_at']),
-    ];
 }

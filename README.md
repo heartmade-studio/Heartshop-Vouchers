@@ -8,9 +8,39 @@ A small, self-hosted shop for gift vouchers for services, by [Heartmade Studio](
 
 This initial standalone distribution starts in **local simulation**. Live selling requires your merchant accounts, real product/seller/legal content, configuration and the acceptance checks in [production setup](docs/production.md). Automated tests do not establish that a merchant account is ready to take money.
 
+## Po polsku — prosty sklep, który możesz prowadzić po swojemu
+
+Sprzedajesz vouchery na swoje usługi? Heartshop Vouchers daje Ci prostą stronę
+zakupu, płatność PAYMOVE.io, kod vouchera i panel do oznaczania jego wykorzystania.
+Termin wizyty uzgadniasz poza sklepem. Faktury wystawiasz osobno — możesz wpisać
+własną instrukcję, jak kupujący ma Cię o nie poprosić.
+
+To projekt open source Heartmade Studio na licencji MIT. Możesz pobrać kod,
+uruchomić przykład lokalnie i dostosować go do swojej działalności. Programistom
+daje niewielki kod PHP/SQLite, testy i opis integracji. Pierwsze uruchomienie jest
+symulacją; przed sprzedażą trzeba przygotować dane sprzedawcy, regulamin, hosting
+i sprawdzić płatności na swoim koncie. Nie ma tu obietnicy gotowego wdrożenia po
+samym sklonowaniu repozytorium.
+
+### Wolisz, żebyśmy skonfigurowali sklep dla Ciebie?
+
+[Zobacz strony i sklepy przygotowywane przez Heartmade](https://heartmade.pl/websites).
+Pomagamy ogarnąć technologię, żeby zostało Ci więcej miejsca na własną pracę.
+Zakres i warunki wdrożenia ustalane są dla konkretnego sklepu. Bezpłatny kod nie
+obejmuje hostingu ani opieki nad uruchomionym sklepem.
+
+### Zobacz lokalny przykład
+
+![Lokalna symulacja sklepu; przykładowa oferta i ilustracja AI](docs/screenshots/storefront.jpg)
+
+[Zobacz również odpowiedź o fakturach](docs/screenshots/invoice-faq.jpg).
+
+Zrzut z lokalnej symulacji, z syntetyczną ofertą. Ilustracja AI nie przedstawia
+rzeczywistego produktu ani gabinetu sprzedawcy. To nie jest zrzut sklepu klienta.
+
 ## Run locally
 
-Requirements: **PHP 8.5** with `curl`, `sqlite3` and `mbstring`. macOS and Linux are supported; on Windows use WSL. No Composer, npm install or database server is required.
+Requirements: **PHP 8.2–8.5** with `curl`, `sqlite3` and `mbstring`. PHP 8.2 is the tested minimum; prefer 8.5 for new installations. macOS and Linux are supported; on Windows use WSL. No Composer, npm install or database server is required.
 
 ```sh
 git clone https://github.com/heartmade-studio/Heartshop-Vouchers.git
@@ -56,10 +86,16 @@ Tests run with synthetic credentials and isolated temporary databases. They cove
 
 ## Documentation and license
 
+- [Merchant indexing and metadata](docs/indexing.md)
+- [Hosting options](docs/hosting.md)
+- [Edition isolation follow-up](docs/edition-isolation.md)
+- [Proposed v0.1.0 notes](docs/releases/v0.1.0-proposal.md)
 - [Architecture and extraction boundaries](docs/architecture.md)
 - [Production setup](docs/production.md)
 - [PAYMOVE contract](docs/integrations.md)
 - [Security reporting](SECURITY.md)
 - [MIT license](LICENSE), with separate [third-party notices](THIRD_PARTY_NOTICES.md).
 
-The included massage-room image is labeled AI illustrations, not photographs of goods or services for sale. Heartmade Studio provides project authorship and implementation services; operating a deployed shop remains the merchant's responsibility.
+The included massage-room image is a labeled AI illustration, not a photograph of goods or services for sale. Heartmade Studio provides project authorship and implementation services; operating a deployed shop remains the merchant's responsibility.
+
+Want it set up for you instead? Heartmade configures Heartshop stores, content and legal templates as a paid service: see [Heartmade websites and stores](https://heartmade.pl/en/websites).

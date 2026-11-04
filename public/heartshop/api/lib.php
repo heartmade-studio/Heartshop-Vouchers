@@ -6,7 +6,18 @@ umask(0077); // New private SQLite/WAL files are owner-only.
 
 function cfg(): array {
     static $cfg = null;
-    return $cfg ??= require __DIR__ . '/config.php';
+    $cfg ??= require __DIR__ . '/config.php';
+    if (($cfg['product_type'] ?? null) === 'voucher' && $cfg['invoice'] !== false) {
+        throw new RuntimeException('Voucher invoice collection is not implemented');
+    }
+    return $cfg;
+}
+
+// The supplied invoice instruction is a sample: real buyers must only receive the seller's approved text.
+function invoiceTextNeedsApproval(array $c): bool {
+    if (($c['product_type'] ?? null) !== 'voucher') return false;
+    $text = trim((string)($c['invoice_request_text'] ?? ''));
+    return $text === '' || str_contains($text, 'przykładowa instrukcja');
 }
 
 // An offer from config by id, or null; a missing id means the shop's default offer.
@@ -126,38 +137,6 @@ function clean(mixed $value, int $max = 120): string {
     return is_string($value) ? trim(preg_replace('/\s+/u', ' ', mb_substr($value, 0, $max)) ?? '') : '';
 }
 
-// Furgonetka needs street, postcode and city separately on the invoice.
-function parseCompanyAddress(string $address): ?array {
-    if (!preg_match('/^(.+?),?\s+(\d{2}-\d{3})\s+(.+)$/u', $address, $m)) return null;
-    return ['street' => $m[1], 'postcode' => $m[2], 'city' => $m[3]];
-}
-
-function validNip(string $nip): bool {
-    if (!preg_match('/^\d{10}$/', $nip)) return false;
-    $w = [6, 5, 7, 2, 3, 4, 5, 6, 7];
-    $sum = 0;
-    for ($i = 0; $i < 9; $i++) $sum += $w[$i] * (int)$nip[$i];
-    return $sum % 11 === (int)$nip[9];
-}
-
-// The point's address from InPost's public points API (Furgonetka requires an address on every order).
-// false = no such point; null = InPost unreachable, so the order is not blocked.
-function inpostPoint(string $code): array|false|null {
-    $ch = curl_init('https://api-shipx-pl.easypack24.net/v1/points/' . rawurlencode($code));
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 5]);
-    $raw = curl_exec($ch);
-    if ($raw === false) return null;
-    $p = json_decode($raw, true);
-    if (($p['key'] ?? '') === 'point_not_found') return false;
-    $a = $p['address_details'] ?? null;
-    if (!is_array($a) || empty($a['city'])) return null;
-    return [
-        'street'   => trim(($a['street'] ?? '') . ' ' . ($a['building_number'] ?? '')),
-        'postcode' => (string)($a['post_code'] ?? ''),
-        'city'     => (string)$a['city'],
-    ];
-}
-
 // Returns [order data, errors keyed by field name].
 function validateOrder(array $in): array {
     $c = cfg();
@@ -200,39 +179,6 @@ function validateOrder(array $in): array {
     if (($in['terms'] ?? null) !== true) $e['terms'] = 'Zaakceptuj regulamin, aby złożyć zamówienie.';
 
     return [$o, $e];
-}
-
-// Phone, delivery method, Paczkomat and address: only a shipped product needs them.
-function validateShipping(array $in, array $c, array &$o, array &$e): void {
-    $phone = preg_replace('/[\s\-()]/', '', clean($in['phone'] ?? '', 30));
-    $phone = preg_replace('/^(\+48|0048)/', '', $phone);
-    $o['phone'] = $phone;
-    if (!preg_match('/^\d{9}$/', $phone)) $e['phone'] = 'Podaj 9-cyfrowy numer telefonu.';
-
-    $o['delivery'] = is_string($in['delivery'] ?? null) && isset($c['delivery'][$in['delivery']]) ? $in['delivery'] : '';
-    if ($o['delivery'] === '') $e['delivery'] = 'Wybierz formę dostawy.';
-
-    if ($o['delivery'] === 'paczkomat') {
-        $o['point'] = strtoupper(clean($in['point'] ?? '', 20));
-        $o['point_label'] = clean($in['point_label'] ?? '', 160);
-        if (!preg_match('/^[A-Z0-9-]{4,20}$/', $o['point'])) {
-            $e['point'] = 'Wybierz Paczkomat.';
-        } else {
-            $p = inpostPoint($o['point']);
-            if ($p === false) $e['point'] = 'Nie ma Paczkomatu o tym kodzie.';
-            if (is_array($p)) {
-                $o['point_address'] = $p;
-                $o['point_label'] = "{$p['street']}, {$p['postcode']} {$p['city']}";
-            }
-        }
-    }
-    // The recipient's address is required for both delivery methods: the carrier needs it on every label.
-    $o['street'] = clean($in['street'] ?? '', 120);
-    $o['postcode'] = clean($in['postcode'] ?? '', 6);
-    $o['city'] = clean($in['city'] ?? '', 60);
-    if (mb_strlen($o['street']) < 3 || !preg_match('/\d/', $o['street'])) $e['street'] = 'Podaj ulicę i numer.';
-    if (!preg_match('/^\d{2}-\d{3}$/', $o['postcode'])) $e['postcode'] = 'Kod w formacie 00-000.';
-    if (mb_strlen($o['city']) < 2) $e['city'] = 'Podaj miejscowość.';
 }
 
 // $number (MS-1001) is what the customer sees in the Paymove checkout; $externalId matches the webhook.

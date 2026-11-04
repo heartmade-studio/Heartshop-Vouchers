@@ -33,20 +33,24 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def check():
+def check(extra=None):
     scratch = Path(tempfile.gettempdir())
     with tempfile.TemporaryDirectory(prefix='heartshop-apache-', dir=scratch) as temp:
         base = Path(temp)
-        site = base / 'www' / 'heartshop'
-        site.mkdir(parents=True)
-        shutil.copy2(ROOT / 'public/heartshop/.htaccess', site / '.htaccess')
-        (site / 'assets').mkdir()
-        (site / 'api').mkdir()
-        (site / 'zamowienie.html').write_text('synthetic checkout')
-        (site / 'assets/checkout.js').write_text('// synthetic asset')
-        for name in ['config', 'lib', 'vouchers', 'panel-lib', 'future-private-helper']:
-            (site / f'api/{name}.php').write_text('MUST NOT BE SERVED')
-        (site / 'api/panel.php').write_text('reviewed entry point')
+        if extra:
+            shutil.copytree(ROOT, base/'repo', ignore=shutil.ignore_patterns('.git','var','private','__pycache__'))
+        web = base/'repo/public' if extra else base/'www'
+        site = web / 'heartshop'
+        if not extra:
+            site.mkdir(parents=True)
+            shutil.copy2(ROOT / 'public/heartshop/.htaccess', site / '.htaccess')
+            (site / 'assets').mkdir()
+            (site / 'api').mkdir()
+            (site / 'zamowienie.html').write_text('synthetic checkout')
+            (site / 'assets/checkout.js').write_text('// synthetic asset')
+            for name in ['config', 'lib', 'vouchers', 'panel-lib', 'future-private-helper']:
+                (site / f'api/{name}.php').write_text('MUST NOT BE SERVED')
+            (site / 'api/panel.php').write_text('reviewed entry point')
         cert, key = base / 'cert.pem', base / 'key.pem'
         subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
                         '-keyout', str(key), '-out', str(cert), '-days', '1',
@@ -71,8 +75,8 @@ User {pwd.getpwuid(os.getuid()).pw_name}
 Group {grp.getgrgid(os.getgid()).gr_name}
 ErrorLog "{base}/error.log"
 LogLevel warn
-DocumentRoot "{base}/www"
-<Directory "{base}/www">
+DocumentRoot "{web}"
+<Directory "{web}">
   Options FollowSymLinks
   AllowOverride All
   Require all granted
@@ -109,6 +113,10 @@ DocumentRoot "{base}/www"
                     return opener.open(urllib.request.Request(url, headers=headers or {}), timeout=3)
                 except urllib.error.HTTPError as e:
                     return e
+
+            if extra:
+                extra(get, http, https, web)
+                return
 
             for path in ['zamowienie.html', 'assets/checkout.js']:
                 # A client-controlled Host/forwarding header cannot choose redirect authority or bypass TLS.
