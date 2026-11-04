@@ -72,7 +72,9 @@ order email, whose Reply-To is `MERCHANT_EMAIL`. Test that the mailbox is monito
 The builder uses this text in FAQ and the terms template; checkout freezes it in
 the order snapshot and the queued buyer email uses that snapshot on resend too.
 Old orders without this field do not inherit a new promise. The code collects no
-invoice details and issues no invoice; `invoice` must remain `false`.
+invoice details and issues no invoice; `invoice` must remain `false`. While the
+supplied sample text (containing "przykładowa instrukcja") or an empty text is
+configured, live PAYMOVE payments and indexing are refused.
 
 The voucher terms are a template for review, not legal advice. Complete the
 placeholders for validity, redemption, transferability, non-cash-exchangeability,

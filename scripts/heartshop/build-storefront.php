@@ -14,6 +14,9 @@ if (!preg_match('#^https://[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?$#D', $origin)
 if ($enabled && (($c['production_ready'] ?? false) !== true || ($o['demo'] ?? true) !== false)) {
     throw new RuntimeException('Indexing requires production_ready and a non-demo default offer');
 }
+if ($enabled && function_exists('invoiceTextNeedsApproval') && invoiceTextNeedsApproval($c)) {
+    throw new RuntimeException('Indexing requires the seller-approved invoice_request_text');
+}
 if (!is_int($o['price']) || $o['price'] <= 0) throw new RuntimeException('Offer price must be positive integer grosze');
 if (!in_array($seo['seller_type'], ['ProfessionalService', 'LocalBusiness'], true)) throw new RuntimeException('Invalid seller type');
 $e = static fn($s) => htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');

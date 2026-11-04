@@ -102,7 +102,7 @@ function voucherNotices(array $order,string $first,string $summary,string $payme
     $q=$order['data']['snapshot']; $codes=vouchersFor($order['external_id']);
     $list=implode("\n",array_map(fn($v)=>"  {$v['code']}  ·  ważny do ".formatDate((int)$v['expires_at']),$codes));
     $messages=[[(string)$order['data']['email'],(count($codes)>1 ? 'Twoje vouchery' : 'Twój voucher')." — {$q['name']}",
-        voucherBuyerMail($order,$first,$list)."\n\n".(string)($q['invoice_request_text'] ?? '')."\n\n$summary\n\nPytania? Po prostu odpowiedz na tę wiadomość.".($seller!=='' ? "\n\n$seller" : ''),
+        voucherBuyerMail($order,$first,$list).(($q['invoice_request_text'] ?? '')!=='' ? "\n\n".$q['invoice_request_text'] : '')."\n\n$summary\n\nPytania? Po prostu odpowiedz na tę wiadomość.".($seller!=='' ? "\n\n$seller" : ''),
         $merchant!=='' ? $merchant : null]];
     if ($merchant!=='') $messages[]=[$merchant,"Nowy opłacony voucher {$order['number']} — ".formatPln((int)$order['total']),
         "Opłacone zamówienie".($order['payment_method'] ? " ({$order['payment_method']})" : '').".\n\nKody:\n$list\n\n$summary\n\n$payment",

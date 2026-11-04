@@ -96,4 +96,6 @@ Tests run with synthetic credentials and isolated temporary databases. They cove
 - [Security reporting](SECURITY.md)
 - [MIT license](LICENSE), with separate [third-party notices](THIRD_PARTY_NOTICES.md).
 
-The included massage-room image is labeled AI illustrations, not photographs of goods or services for sale. Heartmade Studio provides project authorship and implementation services; operating a deployed shop remains the merchant's responsibility.
+The included massage-room image is a labeled AI illustration, not a photograph of goods or services for sale. Heartmade Studio provides project authorship and implementation services; operating a deployed shop remains the merchant's responsibility.
+
+Want it set up for you instead? Heartmade configures Heartshop stores, content and legal templates as a paid service: see [Heartmade websites and stores](https://heartmade.pl/en/websites).

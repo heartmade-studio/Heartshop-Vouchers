@@ -67,7 +67,7 @@ function prepareCheckout(array $input, string $key, ?callable $provider = null, 
     if ($prior !== null) return $prior;
     [$order,$errors]=validateOrder($input);
     if ($errors) throw new CheckoutProblem(422,'validation','Sprawdź dane zamówienia.',null,$errors);
-    if (!paymoveHosts()['sandbox'] && (!(cfg()['production_ready'] ?? false) || (offer($order['offer'])['demo'] ?? true))) {
+    if (!paymoveHosts()['sandbox'] && (!(cfg()['production_ready'] ?? false) || (offer($order['offer'])['demo'] ?? true) || invoiceTextNeedsApproval(cfg()))) {
         throw new CheckoutProblem(503,'demo_only','Ta oferta demonstracyjna jest dostępna tylko w trybie testowym.');
     }
     $order['snapshot']=makeSnapshot($order,cfg());

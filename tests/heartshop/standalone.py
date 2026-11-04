@@ -104,6 +104,9 @@ catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason]
     p.write_text(original.replace("'demo'    => true","'demo'    => false").replace("'demo'         => true","'demo'         => false"))
     a=production('e');assert a['error']=='demo_only' and a['calls']==0
     p.write_text(p.read_text().replace("'production_ready' => false","'production_ready' => true"))
+    if typ=='voucher':
+        a=production('9');assert a['error']=='demo_only' and a['calls']==0  # sample invoice text still blocks
+        p.write_text(p.read_text().replace('To przykładowa instrukcja do zatwierdzenia przez sprzedawcę.','Fakturę wystawimy ręcznie.'))
     a=production('f');assert a['calls']==1 and a['order']['data']['snapshot']['demo'] is False
     assert a['order']['offer_type']==typ
     print('PASS production gates: default denied, each independent gate denied, configured real offer accepted with stub provider')

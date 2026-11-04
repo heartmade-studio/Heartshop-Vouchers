@@ -13,6 +13,13 @@ function cfg(): array {
     return $cfg;
 }
 
+// The supplied invoice instruction is a sample: real buyers must only receive the seller's approved text.
+function invoiceTextNeedsApproval(array $c): bool {
+    if (($c['product_type'] ?? null) !== 'voucher') return false;
+    $text = trim((string)($c['invoice_request_text'] ?? ''));
+    return $text === '' || str_contains($text, 'przykładowa instrukcja');
+}
+
 // An offer from config by id, or null; a missing id means the shop's default offer.
 function offer(mixed $id, ?array $config = null): ?array {
     $c = $config ?? cfg();

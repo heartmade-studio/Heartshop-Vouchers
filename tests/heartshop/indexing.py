@@ -57,6 +57,10 @@ def exercise(get, http, https, web):
     configured=re.sub(r"'demo'(\s*)=> true",r"'demo'\1=> false",configured)
     configured=re.sub(r"'price'(\s*)=> \d+",r"'price'\1=> 12345",configured, count=1)
     configured=re.sub(r"'seller'\s*=> '[^']*'", "'seller' => 'Synthetic seller & studio'",configured)
+    if 'invoice_request_text' in configured:
+        # The sample invoice instruction never becomes public, indexed merchant copy.
+        p.write_text(configured);build(ok=False)
+        configured=re.sub(r"'invoice_request_text' => '[^']*'","'invoice_request_text' => 'Fakturę wystawimy na prośbę wysłaną mailem.'",configured)
     p.write_text(configured);build(check=True,ok=False);build();build(check=True);verify(True)
     # Same gross unit price as the actual checkout snapshot; no parallel price list.
     code="require 'public/heartshop/api/lib.php'; $c=cfg(); echo json_encode(makeSnapshot(['qty'=>1,'delivery'=>'kurier'], $c));"
