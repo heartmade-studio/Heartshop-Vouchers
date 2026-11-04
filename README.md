@@ -40,7 +40,7 @@ rzeczywistego produktu ani gabinetu sprzedawcy. To nie jest zrzut sklepu klienta
 
 ## Run locally
 
-Requirements: **PHP 8.5** with `curl`, `sqlite3` and `mbstring`. macOS and Linux are supported; on Windows use WSL. No Composer, npm install or database server is required.
+Requirements: **PHP 8.2–8.5** with `curl`, `sqlite3` and `mbstring`. PHP 8.2 is the tested minimum; prefer 8.5 for new installations. macOS and Linux are supported; on Windows use WSL. No Composer, npm install or database server is required.
 
 ```sh
 git clone https://github.com/heartmade-studio/Heartshop-Vouchers.git

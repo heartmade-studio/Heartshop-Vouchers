@@ -4,7 +4,7 @@ Heartshop Vouchers includes production payment and fulfillment paths. A fresh cl
 
 ## Runtime and private data
 
-Use PHP 8.5 with curl, sqlite3 and mbstring; Apache 2.4 with rewrite, headers, authz_core and TLS. Use direct HTTPS termination. Reverse proxies require a separately reviewed trusted-proxy configuration; never trust arbitrary `X-Forwarded-Proto`.
+Use PHP 8.2–8.5 (tested minimum 8.2; prefer 8.5 for new installations) with curl, sqlite3 and mbstring; Apache 2.4 with rewrite, headers, authz_core and TLS. Use direct HTTPS termination. Reverse proxies require a separately reviewed trusted-proxy configuration; never trust arbitrary `X-Forwarded-Proto`.
 
 Set Apache `DocumentRoot` to the absolute `public/` directory and allow `.htaccess` rules there (`AllowOverride All`, `Options FollowSymLinks`). Enable rewrite/headers/SSL. Provide a valid TLS certificate for the configured domain. The store is served at `/heartshop/`; changing its base path requires coordinated PHP, HTML, cookie and web-server configuration.
 

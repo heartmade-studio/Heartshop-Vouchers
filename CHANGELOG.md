@@ -7,7 +7,8 @@
   offer facts, structured data, sitemap and robots. Demo/private routes noindex.
 - Config-generated price fallbacks with checkout parity and build-drift checks.
 - Root redirect, hosting comparison and production HSTS guidance.
-- PHP 8.2–8.5 CI matrix and Node 24 checkout action.
+- PHP 8.2–8.5 CI matrix passed; documented minimum lowered to 8.2.
+  Checkout uses Node 24; pinned setup-php already uses Node 24.
 - Polish introduction, contributor guide and local simulation screenshot.
 - Manual invoice-request copy in FAQ, terms and snapshot-based buyer email.
 - Voucher legal review placeholders; Goods helpers quarantined under tests.
