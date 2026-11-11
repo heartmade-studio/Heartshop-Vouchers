@@ -86,6 +86,10 @@ Root `/` redirects to `/heartshop/`. Test both roots and the Host/TLS noindex gu
 See [hosting options](hosting.md) for the open hosting/operator decision and the
 production HSTS recommendation in [indexing](indexing.md).
 
+## Voucher contact line
+
+`voucher_contact` in `api/config.php` is an optional single line (max 160 characters) added to the printable voucher and the buyer email, e.g. how to book the service. It is read from the current configuration, so a changed number also appears on older vouchers' pages; emails already sent keep the old text.
+
 ## Manual invoice and voucher terms review
 
 Set `invoice_request_text` in `api/config.php` to the seller-approved instruction:

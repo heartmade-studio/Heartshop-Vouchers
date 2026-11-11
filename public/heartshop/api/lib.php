@@ -11,6 +11,10 @@ function cfg(): array {
         throw new RuntimeException('Voucher invoice collection is not implemented');
     }
     validateLayout($cfg['shop']);
+    $contact = $cfg['voucher_contact'] ?? '';
+    if (!is_string($contact) || mb_strlen($contact) > 160 || preg_match('/[\r\n]/', $contact)) {
+        throw new RuntimeException('voucher_contact must be one line of at most 160 characters');
+    }
     return $cfg;
 }
 

@@ -115,7 +115,8 @@ function voucherBuyerMail(array $order,string $first,string $list): string {
     $intro=$demo ? 'To voucher demonstracyjny — kod nie uprawnia do masażu. Płatność była testowa. ' : 'dziękujemy! Płatność dotarła. ';
     return "Cześć $first,\n\n$intro".(substr_count($list,"\n")>0 ? 'Kody voucherów' : 'Kod vouchera').":\n\n$list\n\n"
         ."Voucher do wydruku lub wysłania dalej:\n".voucherPageUrl($order)."\n\n"
-        .($demo ? "To wyłącznie przykład sposobu działania vouchera." : "Przy umawianiu terminu wystarczy podać kod.");
+        .($demo ? "To wyłącznie przykład sposobu działania vouchera." : "Przy umawianiu terminu wystarczy podać kod.")
+        .((cfg()['voucher_contact'] ?? '')!=='' ? "\n".cfg()['voucher_contact'] : '');
 }
 
 function processMailQueue(?callable $sender=null,int $limit=20): array {

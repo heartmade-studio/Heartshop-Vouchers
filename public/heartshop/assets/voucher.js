@@ -15,7 +15,7 @@ function card(o, v) {
   set(".v-code-label", t("voucher.code"));
   set(".v-code", v.code);
   set(".v-valid", v.status === "used" ? t("voucher.used") : t("voucher.valid", { date: v.expires }));
-  set(".v-how", t("voucher.how"));
+  set(".v-how", o.contact ? `${t("voucher.how")} ${o.contact}` : t("voucher.how"));
   set(".v-seller", o.seller);
   el.classList.toggle("used", v.status === "used");
   return el;

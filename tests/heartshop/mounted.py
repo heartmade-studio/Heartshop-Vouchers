@@ -38,13 +38,16 @@ with tempfile.TemporaryDirectory(prefix='heartshop-mounted-') as temp:
     for bad in ["'/vouchers/'", "'/Vouchers'", "'/a/b'", "''"]:
         config.write_text(original.replace("'base'   => '/heartshop'", f"'base'   => {bad}"))
         run(['php', 'scripts/heartshop/build-storefront.php'], repo, ok=False)
+    config.write_text(original.replace("'voucher_contact' => ''", "'voucher_contact' => \"a\\nb\""))
+    run(['php', 'scripts/heartshop/build-storefront.php'], repo, ok=False)
     for bad in ["['http://panel.example.com']", "['https://*.example.com']", "['https://shop.example.com']", "'https://panel.example.com'"]:
         config.write_text(original.replace("'panel_origins' => []", f"'panel_origins' => {bad}"))
         run(['php', 'scripts/heartshop/build-storefront.php'], repo, ok=False)
 
     mounted = (original.replace("'base'   => '/heartshop'", "'base'   => '/vouchers'")
                .replace("'mount'  => 'root'", "'mount'  => 'subdirectory'")
-               .replace("'panel_origins' => []", f"'panel_origins' => ['{PANEL}']"))
+               .replace("'panel_origins' => []", f"'panel_origins' => ['{PANEL}']")
+               .replace("'voucher_contact' => ''", "'voucher_contact' => 'Termin ustal telefonicznie: 600 000 000'"))
     config.write_text(mounted)
     run(['php', 'scripts/heartshop/build-storefront.php'], repo)
     run(['php', 'scripts/heartshop/build-storefront.php', '--check'], repo)
@@ -137,6 +140,8 @@ echo json_encode(prepareCheckout($in,str_repeat('e',32),fn($id)=>'https://checko
         with sqlite3.connect(private/'orders.sqlite') as db:
             body = db.execute('SELECT body FROM mail_outbox WHERE recipient=?', ('giver@example.invalid',)).fetchone()[0]
         assert f'{SHOP}/vouchers/twoj-voucher.html?o={seeded["orderId"]}' in body and '/heartshop/' not in body
+        assert 'Termin ustal telefonicznie: 600 000 000' in body
+        assert request(shop+f'/vouchers/api/status.php?o={seeded["orderId"]}')[1]['contact'] == 'Termin ustal telefonicznie: 600 000 000'
 
         login = json.dumps({'password': 'synthetic-panel-pass'}).encode()
         jsonh = {'Content-Type': 'application/json'}

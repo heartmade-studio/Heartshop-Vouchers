@@ -34,6 +34,9 @@ return [
         'seller_type' => 'ProfessionalService', // Vouchers: LocalBusiness or ProfessionalService
         'seller_address' => '', // Public business address, if approved for publication.
     ],
+    // Optional single line on every voucher (printable page and buyer email), e.g. how to book:
+    // 'Termin ustal telefonicznie: 600 000 000'. Shown as configured now, also on older vouchers.
+    'voucher_contact' => '',
     'invoice_request_text' => 'Faktura na żądanie: odpowiedz na wiadomość z potwierdzeniem zamówienia i podaj numer zamówienia. Sprzedawca uzgodni z Tobą dane i ręcznie wystawi fakturę poza sklepem. To przykładowa instrukcja do zatwierdzenia przez sprzedawcę.',
 
     'product_type' => 'voucher',

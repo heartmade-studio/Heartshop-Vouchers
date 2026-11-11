@@ -25,6 +25,7 @@ try {
             'recipient'  => $d['recipient'] ?? '',
             'dedication' => $d['dedication'] ?? '',
             'seller'     => cfg()['shop']['seller'] ?? '',
+            'contact'    => cfg()['voucher_contact'] ?? '',
             'vouchers'   => array_map(fn($v) => ['code' => $v['code'], 'status' => $v['status'],
                 'expires' => formatDate((int)$v['expires_at'])], vouchersFor($order['external_id'])),
         ];

@@ -17,6 +17,7 @@
   `PANEL_ORIGIN`). Hosts and entry points in `.htaccess` are generated from config;
   explicit `.ht*` denial. `release.php` assembles matching shop/panel trees;
   `http-acceptance.py` checks a deployed server read-only.
+- Optional `voucher_contact` line on the printable voucher and buyer email.
 
 No tag or release has been published for this proposal. Provider acceptance and
 merchant deployment are separate from offline regression results.
