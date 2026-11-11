@@ -25,6 +25,11 @@ and PHP's `$_SERVER['HTTPS']` trust a client-sent `X-Forwarded-Proto`, while the
 shop's `.htaccess` `%{HTTPS}` rule did not. Keep that rule, never rely on a hosting
 panel's "force SSL" option, and qualify such a host with
 `scripts/heartshop/http-acceptance.py` over real TLS before accepting it.
+On the same host the HTTPS rules then passed, but web PHP ran with a per-domain
+`open_basedir` (the CLI had none): keep the private directory inside that domain's
+directory, outside its web root, and do not plan a panel on another domain sharing it
+without the host widening `open_basedir`. A Basic-Auth exception for the webhook
+needed Apache 2.2-style `Satisfy Any` there; `Require all granted` in `<Files>` was ignored.
 
 ## Comparison
 
