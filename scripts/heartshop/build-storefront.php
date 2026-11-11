@@ -3,8 +3,9 @@
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') exit(1);
 $root = dirname(__DIR__, 2);
-require $root.'/public/heartshop/api/lib.php';
-$c = cfg(); $seo = $c['indexing']; $o = offer(null);
+require __DIR__.'/layout.php';
+$c = layoutConfig($root); $seo = $c['indexing']; $o = offer(null);
+$base = $c['shop']['base']; $mounted = ($c['shop']['mount'] ?? 'root') === 'subdirectory';
 $enabled = ($seo['enabled'] ?? false) === true;
 $origin = rtrim((string)$seo['origin'], '/');
 if (!preg_match('#^https://[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?$#D', $origin)
@@ -40,7 +41,7 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/pu
     if ($landing) {
         $description = (string)$seo['description'][$lang];
         $title = $o['name'].' — '.$c['shop']['seller'];
-        $path = '/heartshop/'.($lang === 'en' ? 'en/' : ''); $url = $origin.$path;
+        $path = $base.'/'.($lang === 'en' ? 'en/' : ''); $url = $origin.$path;
         $html = preg_replace_callback('#<title>.*?</title>#s', fn() => '<title>'.$e($title).'</title>', $html);
         $html = preg_replace_callback('#<meta name="description" content="[^"]*">#', fn() => '<meta name="description" content="'.$e($description).'">', $html);
         $head = '';
@@ -49,7 +50,7 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/pu
             $offer = ['@type'=>'Offer','url'=>$url,'priceCurrency'=>'PLN','price'=>number_format($o['price']/100, 2, '.', '')];
             // Do not invent ratings, availability, discounts, delivery promises or service locations.
             $seller = ['@type'=>$o['type']==='voucher' ? $seo['seller_type'] : 'Organization',
-                '@id'=>$origin.'/heartshop/#seller','name'=>$c['shop']['seller'],'url'=>$origin.'/heartshop/'];
+                '@id'=>$origin.$base.'/#seller','name'=>$c['shop']['seller'],'url'=>$origin.$base.'/'];
             if ($seo['seller_address'] !== '') $seller['address']=$seo['seller_address'];
             $product = ['@type'=>$o['type']==='voucher' ? 'Service' : 'Product','@id'=>$url.'#offer',
                 'name'=>$o['name'],'description'=>$description,'url'=>$url,'offers'=>$offer+['seller'=>['@id'=>$seller['@id']]]];
@@ -75,16 +76,24 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/pu
 // The only indexable URLs are the reviewed landing pages, on their exact production authority over TLS.
 $rule = '  Header always set X-Robots-Tag "noindex, nofollow"';
 if ($enabled) {
-    $paths = count($pages)>1 ? '^/heartshop/(en/)?(index\\.html)?$' : '^/heartshop/(index\\.html)?$';
+    $paths = '^'.preg_quote($base, '#').(count($pages)>1 ? '/(en/)?(index\\.html)?$' : '/(index\\.html)?$');
     $authority = substr($origin, strlen('https://'));
     $rule .= "\n<If \"%{HTTPS} == 'on' &amp;&amp; %{HTTP_HOST} == '$authority' &amp;&amp; %{REQUEST_URI} =~ m#$paths#\">\n  Header always set X-Robots-Tag \"index, follow\"\n</If>";
     $rule = str_replace('&amp;', '&', $rule);
 }
 $p = $root.'/public/heartshop/.htaccess';
-$files[$p] = preg_replace_callback('/# BEGIN GENERATED INDEXING.*?# END GENERATED INDEXING/s', fn() => "# BEGIN GENERATED INDEXING\n$rule\n# END GENERATED INDEXING", file_get_contents($p));
-$files[$root.'/public/sitemap.xml'] = '<?xml version="1.0" encoding="UTF-8"?>'."\n".'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'."\n"
-    .implode('', array_map(fn($url) => '  <url><loc>'.$e($url)."</loc></url>\n", $urls))."</urlset>\n";
-$files[$root.'/public/robots.txt'] = "User-agent: *\nAllow: /\n".($enabled ? "Sitemap: $origin/sitemap.xml\n" : '# Demo: pages carry noindex in HTTP headers and HTML; do not block crawling.' ."\n");
+$htaccess = replaceGenerated(file_get_contents($p), 'INDEXING', $rule);
+$htaccess = replaceGenerated($htaccess, 'HOSTS', hostRules($c['shop']['origins'], 'shop'));
+// With a separate panel host the shop directory exposes no panel entry point (release.php also omits the files).
+$entries = panelSeparate() ? ['order', 'status', 'webhook'] : ['order', 'status', 'webhook', 'panel'];
+$files[$p] = replaceGenerated($htaccess, 'ENTRY POINTS', entryPointRule($entries));
+if (!$mounted) {
+    // The shop owns the web root: root redirect, sitemap and robots follow the shop configuration.
+    $files[$root.'/public/.htaccess'] = replaceGenerated(file_get_contents($root.'/public/.htaccess'), 'ROOT REDIRECT', "RewriteRule ^$ $base/ [R=308,L]");
+    $files[$root.'/public/sitemap.xml'] = '<?xml version="1.0" encoding="UTF-8"?>'."\n".'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'."\n"
+        .implode('', array_map(fn($url) => '  <url><loc>'.$e($url)."</loc></url>\n", $urls))."</urlset>\n";
+    $files[$root.'/public/robots.txt'] = "User-agent: *\nAllow: /\n".($enabled ? "Sitemap: $origin/sitemap.xml\n" : '# Demo: pages carry noindex in HTTP headers and HTML; do not block crawling.' ."\n");
+}
 $stale = [];
 foreach ($files as $path=>$content) {
     if (is_file($path) && file_get_contents($path)===$content) continue;
@@ -93,3 +102,5 @@ foreach ($files as $path=>$content) {
 }
 if ($stale && in_array('--check', $argv, true)) { fwrite(STDERR, "Rebuild storefront: ".implode(', ', $stale)."\n"); exit(1); }
 echo 'PASS storefront '.(in_array('--check', $argv, true) ? 'freshness' : 'build').'; indexing '.($enabled?'on':'off')."\n";
+// A mounted shop never writes the host website's root files; that website lists the URLs in its own sitemap.
+if ($mounted && $urls) echo "Add to the host website's sitemap.xml: ".implode(' ', $urls)."\n";

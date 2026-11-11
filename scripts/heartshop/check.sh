@@ -9,4 +9,6 @@ php scripts/heartshop/build-storefront.php --check
 python3 tests/heartshop/indexing.py
 python3 tests/heartshop/core.py
 python3 tests/heartshop/standalone.py
+python3 tests/heartshop/mounted.py
+python3 -m py_compile scripts/heartshop/http-acceptance.py
 git diff --check

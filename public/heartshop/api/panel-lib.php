@@ -59,7 +59,9 @@ function panelLogout(mixed $token): void {
 }
 
 function panelCookie(string $value, int $expires): void {
-    setcookie(PANEL_COOKIE, $value, ['expires' => $expires, 'path' => cfg()['shop']['base'] . '/api/',
+    // Host-only (no Domain attribute): the shop host never receives the panel session.
+    $path = (panelSeparate() ? '' : cfg()['shop']['base']) . '/api/';
+    setcookie(PANEL_COOKIE, $value, ['expires' => $expires, 'path' => $path,
         'secure' => true, 'httponly' => true, 'samesite' => 'Strict']);
 }
 

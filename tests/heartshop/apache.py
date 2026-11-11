@@ -33,15 +33,22 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def check(extra=None):
+def check(extra=None, layout=None):
+    """layout(base, http, https) -> (web, extra_conf) builds a custom document root and extra vhosts."""
     scratch = Path(tempfile.gettempdir())
     with tempfile.TemporaryDirectory(prefix='heartshop-apache-', dir=scratch) as temp:
         base = Path(temp)
-        if extra:
+        http, https = port(), port()
+        assert http != https
+        vhosts = ''
+        if layout:
+            web, vhosts = layout(base, http, https)
+        elif extra:
             shutil.copytree(ROOT, base/'repo', ignore=shutil.ignore_patterns('.git','var','private','__pycache__'))
-        web = base/'repo/public' if extra else base/'www'
+        if not layout:
+            web = base/'repo/public' if extra else base/'www'
         site = web / 'heartshop'
-        if not extra:
+        if not extra and not layout:
             site.mkdir(parents=True)
             shutil.copy2(ROOT / 'public/heartshop/.htaccess', site / '.htaccess')
             (site / 'assets').mkdir()
@@ -56,8 +63,6 @@ def check(extra=None):
                         '-keyout', str(key), '-out', str(cert), '-days', '1',
                         '-subj', '/CN=localhost', '-addext', 'subjectAltName=IP:127.0.0.1'],
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        http, https = port(), port()
-        assert http != https
         modules = ['mpm_event', 'unixd', 'authz_core', 'authz_host', 'dir', 'rewrite', 'headers', 'ssl', 'socache_shmcb']
         # Ubuntu compiles unixd into Apache; macOS ships it as a DSO.
         # Ask the actual binary instead of assuming a module layout by OS.
@@ -88,7 +93,7 @@ DocumentRoot "{web}"
   SSLCertificateFile "{cert}"
   SSLCertificateKeyFile "{key}"
 </VirtualHost>
-''')
+''' + vhosts.replace('@CERT@', str(cert)).replace('@KEY@', str(key)))
         subprocess.run([BINARY, '-t', '-f', str(config)], check=True)
         process = subprocess.Popen([BINARY, '-f', str(config), '-DFOREGROUND'],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -141,6 +146,13 @@ DocumentRoot "{web}"
                     assert "frame-ancestors 'none'" in response.headers['Content-Security-Policy']
             with get(f'https://127.0.0.1:{https}/heartshop/api/panel.php') as response:
                 assert response.status == 200, response.status
+            # Some shared hosts treat a client X-Forwarded-Proto as TLS; the shop rules must not.
+            for name in ['panel', 'config', 'lib']:
+                with get(f'http://127.0.0.1:{http}/heartshop/api/{name}.php',
+                         {'Host': 'shop.example.com', 'X-Forwarded-Proto': 'https', 'X-Forwarded-Host': 'attacker.invalid'}) as response:
+                    assert response.status in (308, 403), (name, response.status)
+                    assert 'attacker' not in response.headers.get('Location', '')
+                    assert b'MUST NOT BE SERVED' not in response.read()
             for name in ['config', 'lib', 'vouchers', 'panel-lib', 'future-private-helper']:
                 with get(f'https://127.0.0.1:{https}/heartshop/api/{name}.php') as response:
                     assert response.status == 403, (name, response.status)

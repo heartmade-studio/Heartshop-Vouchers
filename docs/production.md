@@ -6,7 +6,7 @@ Heartshop Vouchers includes production payment and fulfillment paths. A fresh cl
 
 Use PHP 8.2–8.5 (tested minimum 8.2; prefer 8.5 for new installations) with curl, sqlite3 and mbstring; Apache 2.4 with rewrite, headers, authz_core and TLS. Use direct HTTPS termination. Reverse proxies require a separately reviewed trusted-proxy configuration; never trust arbitrary `X-Forwarded-Proto`.
 
-Set Apache `DocumentRoot` to the absolute `public/` directory and allow `.htaccess` rules there (`AllowOverride All`, `Options FollowSymLinks`). Enable rewrite/headers/SSL. Provide a valid TLS certificate for the configured domain. The store is served at `/heartshop/`; changing its base path requires coordinated PHP, HTML, cookie and web-server configuration.
+Set Apache `DocumentRoot` to the absolute `public/` directory and allow `.htaccess` rules there (`AllowOverride All`, `Options FollowSymLinks`). Enable rewrite/headers/SSL. Provide a valid TLS certificate for the configured domain. The store is served at `/heartshop/` by default; see [layout](#layout-base-path-mounted-shop-and-separate-panel-host) to change the path, mount the shop inside another website or give the panel its own host.
 
 ```sh
 umask 077
@@ -19,9 +19,32 @@ php scripts/heartshop/panel-password.php
 
 Edit the private `.env` with your credentials and the generated password-hash line. PHP and CLI workers must run as the data-directory owner; database, WAL and SHM files must be 0600. The default environment path is `private/heartshop/.env` relative to the repository root. An absolute `HEARTSHOP_ENV_FILE` process variable can override it; it must remain outside the web root. Separate every merchant's user, database, secrets and email configuration.
 
+## Layout: base path, mounted shop and separate panel host
+
+All three are build-time settings in `shop` of `api/config.php`; rebuild after changing them.
+
+- `base`: the shop's URL path, one lowercase segment (`/heartshop`, `/vouchers`). The repository directory stays `public/heartshop/`; the release copies it to `<web root><base>/`. Pages, scripts and the panel use relative paths; return URLs, voucher links, canonical URLs and generated Apache rules follow `base`.
+- `mount`: `root` (default) when `public/` is the whole web root, so the build owns the root redirect, `robots.txt` and `sitemap.xml`. `subdirectory` when the shop lives inside another website: the build never writes root files and prints the URL to add to that website's own sitemap. The website's deployment must then exclude the shop directory from any `rsync --delete` before the shop is first uploaded.
+- `panel_origins`: an explicit list of HTTPS panel origins, no wildcards, distinct from the shop origins. When set, `PANEL_ORIGIN` in the private `.env` selects this environment's panel origin; panel POSTs must come from it, and the session cookie is host-only (no `Domain`) with path `/api/` on the panel host. The shop directory then has no panel entry point and the panel host has no checkout, status or webhook. Set `env_file` to an absolute private path outside every web root so both hosts share one `.env` and one database, run by the same OS user. The PAYMOVE webhook stays on the shop host: `https://SHOP/<base>/api/webhook.php`.
+
+Generated Apache blocks (hosts from `shop.origins`, entry points, indexing) are rewritten by the build; edit the config, not the generated lines.
+
+```sh
+php scripts/heartshop/build-storefront.php
+php scripts/heartshop/release.php /tmp/heartshop-release   # new, empty directory
+```
+
+`release.php` refuses a stale build and writes `shop/` (to `<web root><base>/`), `panel/` (the panel host's document root, only with `panel_origins`) and, for `mount: root`, `root/`. Every tree carries the same `api/release-id.php` (denied over HTTP): deploy all trees from one release directory and compare that file on the server. Uploading is a separate operator step.
+
+After deployment and before any sandbox payment, keep the output of the read-only acceptance check on the real server:
+
+```sh
+python3 scripts/heartshop/http-acceptance.py https://SHOP/vouchers/ --panel https://PANEL
+```
+
 ## Merchant configuration
 
-1. Replace example hostnames in `public/heartshop/.htaccess` and `public/heartshop/api/config.php`. Set the identical HTTPS `SHOP_ORIGIN` in private `.env`. `HEARTSHOP_ORIGIN` is an optional server-side allowlist override used by the local launcher; never derive it from a request header. Remove it in production unless intentionally configured.
+1. Replace example hostnames in `shop.origins` (and `indexing.origin`) in `public/heartshop/api/config.php`, then rebuild: the build generates the `.htaccess` host rules. Set the identical HTTPS `SHOP_ORIGIN` in private `.env`. `HEARTSHOP_ORIGIN` is an optional server-side allowlist override used by the local launcher; never derive it from a request header. Remove it in production unless intentionally configured.
 2. Edit offers, prices (integer grosze), tax settings, seller and order prefix in `config.php`. Preserve IDs/prefix after sales start. `masaz-60` is the sample service voucher. Set `default_offer` consistently; only voucher offers are accepted. A new offer needs its own matching HTML `data-offer` and paths.
 3. Replace sample product/seller/contact copy, images and all demo text in the Polish HTML, including voucher/confirmation pages. Replace legal placeholders with your reviewed terms and privacy notice and set `terms_version`. The included documents are samples, not your merchant policy. Use the single indexing switch and build workflow in [indexing](indexing.md); do not edit the HTML/meta and Apache rules separately.
 4. Keep `PAYMOVE_ENV=sandbox` while configuring credentials, product and webhook. Use [integration contracts](integrations.md). No production keys belong in Git, browser code, issues or logs.

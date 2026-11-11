@@ -8,7 +8,15 @@ return [
         'seller' => 'Sklep demonstracyjny Heartmade',
         // SHOP_ORIGIN in the private .env picks this environment's origin; it must be listed here.
         'origins' => getenv('HEARTSHOP_ORIGIN') ? [getenv('HEARTSHOP_ORIGIN')] : ['https://shop.example.com', 'https://staging.shop.example.com'],
+        // URL path of the shop directory: one segment, e.g. '/heartshop' or '/vouchers'. Rebuild after changing it.
         'base'   => '/heartshop',
+        // 'root': public/ is the whole web root; the build owns its root redirect, robots.txt and sitemap.xml.
+        // 'subdirectory': the shop directory is mounted inside another website, which keeps its own root files.
+        'mount'  => 'root',
+        // Optional separate seller-panel origin(s), e.g. ['https://panel.example.com'], served from a separate
+        // document root built by scripts/heartshop/release.php. Empty: the panel stays at <base>/panel/ on the shop host.
+        // PANEL_ORIGIN in the private .env picks this environment's panel origin; it must be listed here.
+        'panel_origins' => [],
         'order_prefix' => 'HV', // order numbers: HS-1001, HS-1002…
     ],
     // Enable only after completing docs/production.md and replacing all sample content.

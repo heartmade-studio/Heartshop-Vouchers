@@ -12,6 +12,11 @@
 - Polish introduction, contributor guide and local simulation screenshot.
 - Manual invoice-request copy in FAQ, terms and snapshot-based buyer email.
 - Voucher legal review placeholders; Goods helpers quarantined under tests.
+- Configurable shop `base` path, `mount: subdirectory` for a shop inside another
+  website, and an optional separate seller-panel host (`panel_origins`,
+  `PANEL_ORIGIN`). Hosts and entry points in `.htaccess` are generated from config;
+  explicit `.ht*` denial. `release.php` assembles matching shop/panel trees;
+  `http-acceptance.py` checks a deployed server read-only.
 
 No tag or release has been published for this proposal. Provider acceptance and
 merchant deployment are separate from offline regression results.
