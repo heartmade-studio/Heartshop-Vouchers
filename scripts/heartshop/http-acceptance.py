@@ -8,10 +8,11 @@ It checks what the Apache test suite checks locally, on the real web server (e.g
 HTTPS redirects, a spoofed X-Forwarded-Proto, security headers, denied includes and route separation.
 Exit status 1 when any check fails. Keep the output as acceptance evidence.
 """
-import argparse, ssl, sys, urllib.error, urllib.parse, urllib.request
+import argparse, base64, netrc, ssl, sys, urllib.error, urllib.parse, urllib.request
 
 INCLUDES = ['lib', 'config', 'panel-lib', 'vouchers', 'reliability', 'checkout-state', 'release-id']
 failures = []
+credentials = None  # netrc entries for a Basic-Auth-protected staging host; never printed
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -23,7 +24,12 @@ opener = urllib.request.build_opener(NoRedirect(), urllib.request.HTTPSHandler(c
 
 
 def get(url, headers=None):
-    req = urllib.request.Request(url, headers=dict({'User-Agent': 'heartshop-acceptance'}, **(headers or {})))
+    headers = dict({'User-Agent': 'heartshop-acceptance'}, **(headers or {}))
+    host = urllib.parse.urlsplit(url).hostname
+    login = credentials.authenticators(host) if credentials else None
+    if login and url.startswith('https://'):  # never send credentials over plain HTTP
+        headers.setdefault('Authorization', 'Basic ' + base64.b64encode(f'{login[0]}:{login[2]}'.encode()).decode())
+    req = urllib.request.Request(url, headers=headers)
     try:
         r = opener.open(req, timeout=15)
     except urllib.error.HTTPError as e:
@@ -68,7 +74,11 @@ def main():
     a.add_argument('shop', help='HTTPS shop URL ending with /, e.g. https://example.com/vouchers/')
     a.add_argument('--panel', help='HTTPS origin of a separate panel host')
     a.add_argument('--indexed', action='store_true', help='expect the landing page to be indexable')
+    a.add_argument('--netrc', help='netrc file with Basic Auth credentials for a protected staging host (HTTPS only)')
     args = a.parse_args()
+    global credentials
+    if args.netrc:
+        credentials = netrc.netrc(args.netrc)
     shop = args.shop
     if not shop.startswith('https://') or not shop.endswith('/'):
         sys.exit('Shop URL must be https:// and end with /')
