@@ -34,7 +34,7 @@ php scripts/heartshop/build-storefront.php
 php scripts/heartshop/release.php /tmp/heartshop-release   # new, empty directory
 ```
 
-`release.php` refuses a stale build and writes `shop/` (to `<web root><base>/`), `panel/` (the panel host's document root, only with `panel_origins`) and, for `mount: root`, `root/`. Every tree carries the same `api/release-id.php` (denied over HTTP): deploy all trees from one release directory and compare that file on the server. Uploading is a separate operator step.
+`release.php` refuses a stale build and writes `shop/` (to `<web root><base>/`), `panel/` (the panel host's document root, only with `panel_origins`), `worker/` (the CLI mail worker and password tool, for a private directory outside every web root) and, for `mount: root`, `root/`. Every tree carries the same `api/release-id.php` (denied over HTTP): deploy all trees from one release directory and compare that file on the server. Uploading is a separate operator step.
 
 After deployment and before any sandbox payment, keep the output of the read-only acceptance check on the real server:
 

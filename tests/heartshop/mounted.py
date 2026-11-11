@@ -72,7 +72,8 @@ with tempfile.TemporaryDirectory(prefix='heartshop-mounted-') as temp:
     assert {'api/order.php', 'api/status.php', 'api/webhook.php', 'index.html'} <= set(files['shop'])
     assert not {'api/order.php', 'api/status.php', 'api/webhook.php', 'index.html', 'zamowienie.html'} & set(files['panel'])
     assert {'.htaccess', 'panel/index.html', 'api/panel.php', 'api/lib.php', 'assets/panel.js'} <= set(files['panel'])
-    assert (out/'shop/api/release-id.php').read_bytes() == (out/'panel/api/release-id.php').read_bytes()
+    assert (out/'shop/api/release-id.php').read_bytes() == (out/'panel/api/release-id.php').read_bytes() == (out/'worker/release-id.php').read_bytes()
+    assert sorted(p.name for p in (out/'worker').iterdir()) == ['panel-password.php', 'release-id.php', 'retry-mail.php']
     assert not any(re.search(r'(^|/)(\.env|private|scripts|tests)(/|$)', f) for t in files.values() for f in t)
     panel_rules = (out/'panel/.htaccess').read_text()
     assert 'panel\\.example\\.com' in panel_rules and 'shop\\.example\\.com' not in panel_rules
