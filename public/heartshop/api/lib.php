@@ -10,7 +10,33 @@ function cfg(): array {
     if (($cfg['product_type'] ?? null) === 'voucher' && $cfg['invoice'] !== false) {
         throw new RuntimeException('Voucher invoice collection is not implemented');
     }
+    validateLayout($cfg['shop']);
+    $contact = $cfg['voucher_contact'] ?? '';
+    if (!is_string($contact) || mb_strlen($contact) > 160 || preg_match('/[\r\n]/', $contact)) {
+        throw new RuntimeException('voucher_contact must be one line of at most 160 characters');
+    }
     return $cfg;
+}
+
+// The URL layout is deployment configuration: one base segment, explicit HTTPS origins, no wildcards.
+function validateLayout(array $shop): void {
+    if (!is_string($shop['base'] ?? null) || !preg_match('#^/[a-z0-9]+(?:-[a-z0-9]+)*$#D', $shop['base'])) {
+        throw new RuntimeException('Shop base must be one lowercase path segment, e.g. /heartshop');
+    }
+    if (!in_array($shop['mount'] ?? 'root', ['root', 'subdirectory'], true)) throw new RuntimeException('Invalid shop mount');
+    $panel = $shop['panel_origins'] ?? [];
+    if (!is_array($panel) || !array_is_list($panel)) throw new RuntimeException('Invalid panel origins');
+    foreach ($panel as $origin) {
+        if (!is_string($origin) || !preg_match('#^https://[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?$#D', $origin)
+            || in_array($origin, $shop['origins'], true)) {
+            throw new RuntimeException('Panel origins must be explicit HTTPS origins, distinct from shop origins');
+        }
+    }
+}
+
+// True when the seller panel has its own host and document root (see release.php).
+function panelSeparate(): bool {
+    return (cfg()['shop']['panel_origins'] ?? []) !== [];
 }
 
 // The supplied invoice instruction is a sample: real buyers must only receive the seller's approved text.
@@ -61,6 +87,10 @@ function secrets(): array {
     }
     if (!in_array($values['PAYMOVE_ENV'] ?? 'sandbox',['sandbox','production'],true)) throw new RuntimeException('Invalid payment environment');
     if (!in_array($values['SHOP_ORIGIN'] ?? '',cfg()['shop']['origins'],true)) throw new RuntimeException('Invalid shop origin');
+    $panel = $values['PANEL_ORIGIN'] ?? '';
+    if (panelSeparate() ? !in_array($panel, cfg()['shop']['panel_origins'], true) : $panel !== '') {
+        throw new RuntimeException('Invalid panel origin');
+    }
     return $env = $values;
 }
 
@@ -276,6 +306,11 @@ function shopOrigin(): string {
 
 function sameOrigin(): bool {
     return ($_SERVER['HTTP_ORIGIN'] ?? '') === shopOrigin();
+}
+
+// The panel's own origin: PANEL_ORIGIN when the panel has a separate host, otherwise the shop origin.
+function panelOrigin(): string {
+    return panelSeparate() ? secrets()['PANEL_ORIGIN'] : shopOrigin();
 }
 
 function logError(Throwable $e, string $where): void {

@@ -8,7 +8,15 @@ return [
         'seller' => 'Sklep demonstracyjny Heartmade',
         // SHOP_ORIGIN in the private .env picks this environment's origin; it must be listed here.
         'origins' => getenv('HEARTSHOP_ORIGIN') ? [getenv('HEARTSHOP_ORIGIN')] : ['https://shop.example.com', 'https://staging.shop.example.com'],
+        // URL path of the shop directory: one segment, e.g. '/heartshop' or '/vouchers'. Rebuild after changing it.
         'base'   => '/heartshop',
+        // 'root': public/ is the whole web root; the build owns its root redirect, robots.txt and sitemap.xml.
+        // 'subdirectory': the shop directory is mounted inside another website, which keeps its own root files.
+        'mount'  => 'root',
+        // Optional separate seller-panel origin(s), e.g. ['https://panel.example.com'], served from a separate
+        // document root built by scripts/heartshop/release.php. Empty: the panel stays at <base>/panel/ on the shop host.
+        // PANEL_ORIGIN in the private .env picks this environment's panel origin; it must be listed here.
+        'panel_origins' => [],
         'order_prefix' => 'HV', // order numbers: HS-1001, HS-1002…
     ],
     // Enable only after completing docs/production.md and replacing all sample content.
@@ -26,6 +34,9 @@ return [
         'seller_type' => 'ProfessionalService', // Vouchers: LocalBusiness or ProfessionalService
         'seller_address' => '', // Public business address, if approved for publication.
     ],
+    // Optional single line on every voucher (printable page and buyer email), e.g. how to book:
+    // 'Termin ustal telefonicznie: 600 000 000'. Shown as configured now, also on older vouchers.
+    'voucher_contact' => '',
     'invoice_request_text' => 'Faktura na żądanie: odpowiedz na wiadomość z potwierdzeniem zamówienia i podaj numer zamówienia. Sprzedawca uzgodni z Tobą dane i ręcznie wystawi fakturę poza sklepem. To przykładowa instrukcja do zatwierdzenia przez sprzedawcę.',
 
     'product_type' => 'voucher',

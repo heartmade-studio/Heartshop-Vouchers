@@ -19,6 +19,18 @@ quote**, and do not include domain, payment fees or implementation work.
 - Consistent SQLite `.backup` (or SQLite backup API) to storage outside webroot,
   off-host copy and tested restore. Host snapshots alone do not prove WAL safety.
 
+LiteSpeed (common on Polish shared hosting) is not Apache. A first partial check on
+one LiteSpeed host (2026-11-11, HTTP only) found that the server's own HTTPS redirect
+and PHP's `$_SERVER['HTTPS']` trust a client-sent `X-Forwarded-Proto`, while the
+shop's `.htaccess` `%{HTTPS}` rule did not. Keep that rule, never rely on a hosting
+panel's "force SSL" option, and qualify such a host with
+`scripts/heartshop/http-acceptance.py` over real TLS before accepting it.
+On the same host the HTTPS rules then passed, but web PHP ran with a per-domain
+`open_basedir` (the CLI had none): keep the private directory inside that domain's
+directory, outside its web root, and do not plan a panel on another domain sharing it
+without the host widening `open_basedir`. A Basic-Auth exception for the webhook
+needed Apache 2.2-style `Satisfy Any` there; `Require all granted` in `<Files>` was ignored.
+
 ## Comparison
 
 | Option | Monthly infrastructure budget, net PLN | Who operates what | Fit and checks still needed |

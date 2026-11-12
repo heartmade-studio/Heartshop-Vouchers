@@ -2,7 +2,8 @@
 declare(strict_types=1);
 require __DIR__ . '/lib.php';
 
-// The seller's orders panel (<base>/panel/). Every action except login and session needs a valid session cookie.
+// The seller's orders panel (<base>/panel/, or /panel/ on its own host when panel_origins is set).
+// Every action except login and session needs a valid session cookie.
 //   GET  ?action=session            {authenticated}
 //   POST ?action=login  {password}  sets the cookie
 //   POST ?action=logout
@@ -16,7 +17,7 @@ try {
     $method = $_SERVER['REQUEST_METHOD'];
     $in = [];
     if ($method === 'POST') {
-        if (!sameOrigin()) jsonOut(['error' => 'Invalid origin'], 403);
+        if (($_SERVER['HTTP_ORIGIN'] ?? '') !== panelOrigin()) jsonOut(['error' => 'Invalid origin'], 403);
         $raw = file_get_contents('php://input', false, null, 0, 16385) ?: '';
         if (strlen($raw) > 16384) jsonOut(['error' => 'Request too large'], 413);
         $in = $raw === '' ? [] : json_decode($raw, true);
