@@ -136,7 +136,7 @@ try {
     check(count(vouchersFor($vp['orderId']))===2,'duplicate webhook issues no extra codes');
     $vmails=[];$r=db()->query("SELECT * FROM mail_outbox WHERE order_external_id='{$vp['orderId']}' ORDER BY id");while($m=$r->fetchArray(SQLITE3_ASSOC))$vmails[]=$m;
     check(count($vmails)===2 && (int)db()->querySingle('SELECT COUNT(*) FROM mail_outbox')===$mailsBefore+2,'voucher payment queues buyer and seller mail once');
-    check(str_contains($vmails[0]['body'],$codes[0]['code']) && str_contains($vmails[0]['body'],$codes[1]['code']),'buyer mail carries every code');
+    check(str_contains($vmails[0]['body'],$vin['email']) && str_contains($vmails[0]['body'],'Voucher 2 · nr '.$codes[1]['code']) && str_contains($vmails[0]['body'],$codes[0]['code']),'buyer mail books by email and numbers each unit');
     check(str_contains($vmails[0]['body'],'https://shop.example.com/heartshop/voucher/twoj-voucher.html?o='.$vp['orderId']),'buyer mail links the printable voucher');
     check(!str_contains($vmails[0]['body'],'paczk') && !str_contains($vmails[0]['body'],'Wysyłamy'),'voucher mail promises no parcel');
     check(str_contains($vmails[0]['body'],'Dla: Ania') && str_contains($vmails[1]['body'],$vin['email']),'recipient in summary; seller sees the codes');

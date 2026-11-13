@@ -20,12 +20,15 @@
 - Optional `voucher_contact` line on the printable voucher and buyer email.
 - Two-sided 6×4-inch printable voucher with recipient preview while typing,
   print and in-browser PDF download (bundled jsPDF 4.2.1, MIT). Recipient is
-  required for new orders; older vouchers without one print no name. Each voucher
-  keeps its own code for redemption; demo vouchers carry the demo label on the
-  printed face. Invoice fields removed from the voucher checkout (manual invoice
+  required for new orders; older vouchers without one print no name. Booking is by
+  the buyer email; each voucher also shows its own number (voucher, mails,
+  panel) for sellers who want to tell copies apart. Demo vouchers carry the demo
+  label on the printed face. Invoice fields removed from the voucher checkout (manual invoice
   instructions unchanged).
 - Retried payment creation re-checks the current production gates; the local
   simulator supports cancel → retry → pay on the same order.
+- Seller panel: dark buttons readable again (the shop theme had made `--night`
+  a light surface); buyer-email lookup field no longer uppercased.
 - Payment recovery: a lost PAYMOVE create response is resumed under the same
   `externalId` with the frozen order; resumed checkouts read the payment status
   first, signed failed transactions are audited and diagnostics stay data-free.

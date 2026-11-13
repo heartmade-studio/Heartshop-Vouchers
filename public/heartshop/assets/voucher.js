@@ -8,11 +8,12 @@ function card(o, v) {
   const el = $("voucher-template").content.firstElementChild.cloneNode(true);
   const set = (sel, text) => { const n = el.querySelector(sel); n.textContent = text; n.hidden = !text; };
   // The demo label sits on the printed face, so a forwarded sandbox PDF still says it.
-  el.querySelector(".gift-demo").hidden = !o.demo;
+  el.querySelector(".voucher-demo").hidden = !o.demo;
   // Older orders may have no recipient: print no name rather than an invented one.
   set(".gift-for", o.recipient ? t("voucher.for", { name: o.recipient }) : "");
   set(".gift-message", o.dedication || t("voucher.defaultDedication"));
   set(".service-cover h2", o.product);
+  set(".booking-email", o.buyerEmail);
   set(".booking-code", v.code);
   set(".booking-expiry", v.expires);
   set(".gift-status", v.status === "used" ? t("voucher.used") : "");

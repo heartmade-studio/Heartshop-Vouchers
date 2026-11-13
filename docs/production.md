@@ -69,7 +69,7 @@ Back up SQLite using its backup API/CLI `.backup`, including a tested restore; d
 Run `bash scripts/heartshop/check.sh`, then exercise your HTTPS sandbox installation:
 
 - Successful payment, cancellation, timeout, duplicate and delayed signed events, amount mismatch and changed provider ID. Only verified paid events may release goods or vouchers.
-- Voucher issuance, printable/PDF voucher with its code, and redemption/undo by code. Establish the separate merchant invoicing process before live selling.
+- Voucher issuance, printable/PDF voucher, buyer-email lookup and redemption/undo. Establish the separate merchant invoicing process before live selling.
 - Mail worker failure/retry and actual delivery; panel login/logout and unauthenticated rejection.
 - HTTP redirects, allowed hosts, direct PHP-helper denial, private paths unreachable, backup restoration.
 
@@ -90,7 +90,13 @@ production HSTS recommendation in [indexing](indexing.md).
 
 `twoj-voucher.html` is a two-sided 6×4-inch voucher (front: recipient and dedication; back: service, booking details, expiry) that buyers print or download as a PDF generated in the browser with the bundled jsPDF. Its booking details (phone, address, website) are fictional sample text: replace them in the template before selling.
 
-Each voucher carries its own code on the printed back and in the buyer email. The recipient quotes that code when booking, and the seller redeems that exact code in the panel, so knowing the buyer's email address is not enough to claim a gift and several vouchers from one purchase stay distinguishable. The panel search also finds orders by buyer email. A sandbox (demo) voucher prints a "DEMO — not valid for a service" label on its front face, including in the PDF.
+Booking is by the buyer's email address, printed on the voucher; the checkout tells the buyer so. The recipient brings the voucher (printed or on a phone) and gives that address. Each voucher also prints its own number in small type, and the same number appears in both emails and the panel. Nobody has to quote or type it. Choose the level that suits the business:
+
+1. **Email only.** Leave the panel closed (no `PANEL_PASSWORD_HASH`). Each paid order sends the seller an email with the buyer address, the vouchers and their validity; find it in the mailbox when someone comes in.
+2. **Panel.** Search by the buyer email and click *Wykorzystany* on a voucher.
+3. **Panel and number.** Click the voucher whose number matches the presented copy, so several vouchers from one purchase and a second visit with an already used copy can be told apart.
+
+This is a deliberate choice for small businesses selling a few dozen vouchers: anyone who knows the buyer's address could claim a gift, so look at the voucher itself when it is redeemed. Without marking vouchers as used (level 1), nothing prevents a second visit with the same copy, as with handwritten paper vouchers. A sandbox (demo) voucher prints a "DEMO — not valid for a service" label on its front face, including in the PDF.
 
 ## Voucher contact line
 

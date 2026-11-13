@@ -95,7 +95,7 @@ $s->bindValue(':hint',json_encode(['status'=>'PENDING','order_id'=>'fixture-pm']
             assert event('COMPLETED', seeded['voucher']['total'], voucher)[1]['status'] == 'paid'
             code, status, _ = request(f'status.php?o={voucher}')
             assert code == 200 and status['type'] == 'voucher' and status['recipient'] == 'Ania' and len(status['vouchers']) == 1
-            assert status['vouchers'][0]['code'] and 'buyerEmail' not in status  # the shareable link shows the code, not the buyer's address
+            assert status['buyerEmail'] == 'giver@example.invalid' and status['vouchers'][0]['code']  # booking by email; the number tells copies apart
             queue = json.loads(subprocess.check_output(['php', str(ROOT/'scripts/heartshop/retry-mail.php'), '--status', str(ROOT/'public/heartshop/api/lib.php')], env=env))
             assert queue['queue'] == [{'status': 'pending', 'count': 4, 'max_attempts': 0}]
 

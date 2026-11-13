@@ -531,15 +531,15 @@ function voucherCard(o, v = {code:'K7PM-4QXT', status:'active', expires:'31.12.2
   p.context.card(o, v);
   return sel => parts.get(sel);
 }
-test('printed voucher shows its own code, never the buyer address',()=>{
+test('printed voucher books by buyer email and shows its own number',()=>{
   const part=voucherCard({product:'Masaż',recipient:'Ani',dedication:'',demo:false,buyerEmail:'giver@example.invalid'});
+  assert.equal(part('.booking-email').textContent,'giver@example.invalid');
   assert.equal(part('.booking-code').textContent,'K7PM-4QXT');
-  assert.equal(part('.booking-email'),undefined);
   assert.equal(part('.gift-for').textContent,'Dla Ani');
 });
 test('demo voucher carries the demo label on its printed face',()=>{
-  assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:true})('.gift-demo').hidden,false);
-  assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:false})('.gift-demo').hidden,true);
+  assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:true})('.voucher-demo').hidden,false);
+  assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:false})('.voucher-demo').hidden,true);
 });
 test('older voucher without a recipient prints no invented name',()=>{
   const forLine=voucherCard({product:'Masaż',recipient:'',demo:false})('.gift-for');
