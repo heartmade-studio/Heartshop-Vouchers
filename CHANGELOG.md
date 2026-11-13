@@ -29,6 +29,8 @@
   simulator supports cancel → retry → pay on the same order.
 - Seller panel: dark buttons readable again (the shop theme had made `--night`
   a light surface); buyer-email lookup field no longer uppercased.
+- Orders record whether they were paid in the PAYMOVE sandbox. A real offer paid
+  there is labelled as a test payment on the printed voucher, PDF and buyer mail.
 - Payment recovery: a lost PAYMOVE create response is resumed under the same
   `externalId` with the frozen order; resumed checkouts read the payment status
   first, signed failed transactions are audited and diagnostics stay data-free.

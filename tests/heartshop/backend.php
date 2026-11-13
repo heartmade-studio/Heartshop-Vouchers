@@ -118,8 +118,13 @@ try {
     check($vorder['total']===50000 && $vorder['data']['snapshot']['shipping']===0 && $vorder['data']['snapshot']['type']==='voucher','voucher total has no shipping');
     check($vorder['offer_type']==='voucher' && $vorder['data']['snapshot']['valid_months']===12 && $vorder['data']['snapshot']['path']==='voucher/','voucher snapshot keeps type, validity and page');
     check($vorder['data']['snapshot']['demo']===true,'new demo voucher records its identity');
-    $legacyVoucher=$vorder; unset($legacyVoucher['data']['snapshot']['demo']);
-    check(!str_contains(voucherBuyerMail($legacyVoucher,'Test','CODE'),'demonstracyjny'),'historical voucher mail does not claim demo status');
+    check($vorder['data']['snapshot']['test_payment']===true,'sandbox order records its test payment');
+    $sandboxReal=$vorder; $sandboxReal['data']['snapshot']['demo']=false;
+    $mail=voucherBuyerMail($sandboxReal,'Test','CODE');
+    check(str_contains($mail,'płatności testowej') && !str_contains($mail,'Płatność dotarła'),'real offer paid in the sandbox is mailed as a test payment');
+    $legacyVoucher=$vorder; unset($legacyVoucher['data']['snapshot']['demo'],$legacyVoucher['data']['snapshot']['test_payment']);
+    $mail=voucherBuyerMail($legacyVoucher,'Test','CODE');
+    check(!str_contains($mail,'demonstracyjny') && !str_contains($mail,'płatności testowej'),'historical voucher mail claims neither demo nor test status');
     // The pre-voucher implementation, verbatim: an attempt open during the deploy keeps its fingerprint.
     $old=array_intersect_key($input,array_flip(['qty','email','phone','name','delivery','point','point_label','street','postcode','city','invoice','company','nip','company_address','terms']));ksort($old);
     check(requestFingerprint($input)===hash('sha256',json_encode($old,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE)),'candle fingerprint unchanged by new keys');

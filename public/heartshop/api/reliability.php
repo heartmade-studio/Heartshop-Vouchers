@@ -171,12 +171,19 @@ function voucherNotices(array $order,string $first,string $summary,string $payme
     return $messages;
 }
 
+/** Paid in the PAYMOVE sandbox, as recorded when the order was created. Older orders have no record. */
+function testPayment(array $data): bool {
+    return ($data['snapshot']['test_payment'] ?? false) === true;
+}
+
 function voucherBuyerMail(array $order,string $first,string $list): string {
     $demo=($order['data']['snapshot']['demo'] ?? false) === true;
-    $intro=$demo ? 'To voucher demonstracyjny. Płatność była testowa. ' : 'dziękujemy! Płatność dotarła. ';
+    $test=!$demo && testPayment($order['data']);
+    $intro=$demo ? 'To voucher demonstracyjny. Płatność była testowa. '
+        : ($test ? 'To voucher z płatności testowej — nie uprawnia do usługi. ' : 'dziękujemy! Płatność dotarła. ');
     return "Cześć $first,\n\n$intro\nE-mail kupującego do rezerwacji: {$order['data']['email']}\n\n$list\n\n"
         ."Voucher do wydruku lub wysłania dalej:\n".voucherPageUrl($order)."\n\n"
-        .($demo ? "To wyłącznie przykład sposobu działania vouchera." : "Przy umawianiu terminu podaj adres e-mail kupującego.")
+        .($demo || $test ? "To wyłącznie przykład sposobu działania vouchera." : "Przy umawianiu terminu podaj adres e-mail kupującego.")
         .((cfg()['voucher_contact'] ?? '')!=='' ? "\n".cfg()['voucher_contact'] : '');
 }
 

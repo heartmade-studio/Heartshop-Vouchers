@@ -77,6 +77,9 @@ function prepareCheckout(array $input, string $key, ?callable $provider = null, 
     if (!salesOpen($order)) demoOnly();
     $order['snapshot']=makeSnapshot($order,cfg());
     $order['snapshot']['payment_scope']=paymentScope();
+    // Recorded at creation, never read from the current setting: payment_scope pins the order
+    // to this environment, and a test payment must stay labelled after the shop goes live.
+    $order['snapshot']['test_payment']=paymoveHosts()['sandbox'];
     // Shop-wide cap on new provider calls only: junk or invalid POSTs cannot exhaust it.
     if (!consumeLimits(['global'=>200],$now)) throw new CheckoutProblem(429,'rate_limited','Zbyt wiele prób. Odczekaj kilka minut.');
     $db=db();$db->exec('BEGIN IMMEDIATE');

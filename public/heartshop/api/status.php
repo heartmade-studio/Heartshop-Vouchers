@@ -20,6 +20,7 @@ try {
         'type'   => orderType($d),
         'offer'  => (string)($d['snapshot']['product_id'] ?? $d['offer'] ?? '1'),
         'demo'   => ($d['snapshot']['demo'] ?? false) === true,
+        'testPayment' => testPayment($d),
     ];
     // The order id in the link is the bearer token for its vouchers; only a paid order has codes.
     if ($out['type'] === 'voucher' && $order['status'] === 'paid') {

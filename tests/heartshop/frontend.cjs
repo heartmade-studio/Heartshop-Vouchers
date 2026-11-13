@@ -523,7 +523,7 @@ function voucherCard(o, v = {code:'K7PM-4QXT', status:'active', expires:'31.12.2
   const p = page('twoj-voucher.html');
   const parts = new Map();
   const face = {cloneNode:() => face, querySelector:sel => {
-    if (!parts.has(sel)) parts.set(sel, {textContent:'', hidden:false});
+    if (!parts.has(sel)) parts.set(sel, {textContent:sel === '.voucher-demo' ? 'DEMO' : '', hidden:false});
     return parts.get(sel);
   }};
   p.element('voucher-template').content = {firstElementChild:face};
@@ -545,4 +545,10 @@ test('older voucher without a recipient prints no invented name',()=>{
   const forLine=voucherCard({product:'Masaż',recipient:'',demo:false})('.gift-for');
   assert.equal(forLine.textContent,'');
   assert.equal(forLine.hidden,true);
+});
+test('real offer paid in the sandbox is labelled as a test payment on the printed face',()=>{
+  const label=voucherCard({product:'Masaż',recipient:'Ani',demo:false,testPayment:true})('.voucher-demo');
+  assert.equal(label.hidden,false);
+  assert.match(label.textContent,/Płatność testowa/);
+  assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:false,testPayment:false})('.voucher-demo').hidden,true);
 });

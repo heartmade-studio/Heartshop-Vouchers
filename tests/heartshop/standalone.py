@@ -53,7 +53,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         assert request('/__dev/settle',{'orderId':order['orderId']}, {'Origin':'http://attacker.invalid'})[0]==403
         assert request('/__dev/settle',{'orderId':order['orderId']})[1]['status']=='paid'
         status=request('/heartshop/api/status.php?o='+order['orderId'])[1]
-        assert status['status']=='paid' and status['demo'] is True and status['type']==typ
+        assert status['status']=='paid' and status['demo'] is True and status['testPayment'] is True and status['type']==typ
         if KIND=='vouchers':
             assert len(status['vouchers'])==1
             with sqlite3.connect(repo/'var/local/orders.sqlite') as db:
@@ -120,7 +120,7 @@ catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason,
     if typ=='voucher':
         a=production('9');assert a['error']=='demo_only' and a['calls']==0  # sample invoice text still blocks
         p.write_text(p.read_text().replace('To przykładowa instrukcja do zatwierdzenia przez sprzedawcę.','Fakturę wystawimy ręcznie.'))
-    a=production('f');assert a['calls']==1 and a['order']['data']['snapshot']['demo'] is False
+    a=production('f');assert a['calls']==1 and a['order']['data']['snapshot']['demo'] is False and a['order']['data']['snapshot']['test_payment'] is False
     assert a['order']['offer_type']==typ
     print('PASS production gates: default denied, each independent gate denied, configured real offer accepted with stub provider')
     # A recovered retry re-checks the CURRENT gates before creating a payment.
