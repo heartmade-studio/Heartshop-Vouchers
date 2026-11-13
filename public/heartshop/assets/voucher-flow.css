@@ -1,0 +1,69 @@
+/* The purchase pages share the landing page's palette and locally hosted type. */
+.voucher-flow {
+  --display: Playfair, Georgia, serif;
+  --panel: #e7d2c4;
+  --white: #fffaf3;
+  --field: #ac928a;
+  --honey: var(--wine);
+  --honey-hover: #572d37;
+}
+.voucher-flow .secure { color: var(--muted-cream); }
+.voucher-flow .fieldset legend, .voucher-flow .product-line .name { font-weight: 400; }
+.voucher-flow .field :is(input, textarea) { caret-color: var(--wine); }
+.voucher-flow .field :is(input, textarea):focus { outline-color: var(--wine); border-color: var(--wine); }
+.voucher-flow .qty-row, .voucher-flow .stepper, .voucher-flow .grand { border-color: var(--field); }
+.voucher-flow .stepper button:hover:not(:disabled) { background: var(--panel); }
+.voucher-flow .sum-pay .btn, .voucher-flow .thanks .btn { background: var(--wine); color: var(--cream); }
+.voucher-flow .sum-pay .btn:hover, .voucher-flow .thanks .btn:hover { background: var(--honey-hover); }
+.voucher-flow .voucher-thumb, .voucher-flow .thanks-visual {
+  background: var(--wine) url('voucher-massage.webp') center 55% / cover;
+}
+.voucher-flow .thanks-visual { min-height: 320px; margin: 0; }
+.voucher-flow .thanks .badge-mark { background: var(--wine); color: var(--cream); }
+.voucher-flow .thanks .badge-mark.wait { background: var(--panel); color: var(--wine); }
+.voucher-flow .v-product { font-family: var(--display); font-weight: 400; }
+.voucher-flow .print-sheet { width: min(780px, 92%); }
+.voucher-flow .printable { width: 100%; padding: 0; gap: 0; overflow: hidden; background: #fffaf3; }
+.voucher-cover { position: relative; isolation: isolate; background: var(--wine); color: var(--cream); }
+.voucher-cover img { position: absolute; z-index: -1; inset: 0 0 0 auto; width: 53%; height: 100%; object-fit: cover; object-position: center 56%; }
+.voucher-heading { display: grid; gap: 20px; align-content: center; width: 47%; min-height: 260px; padding: clamp(22px, 4vw, 44px); }
+.voucher-heading .v-kind { color: var(--rose); }
+.voucher-heading .v-product { font-size: clamp(30px, 4.8vw, 55px); }
+.voucher-details { display: grid; min-width: 0; gap: 7px; padding: clamp(22px, 4vw, 44px); overflow-wrap: anywhere; }
+.voucher-details .v-for { font: 400 26px/1.25 var(--display); }
+.voucher-details .v-dedication { max-width: none; white-space: pre-line; }
+.voucher-details .v-code-row { align-items: baseline; flex-wrap: wrap; border-color: var(--line); }
+.voucher-details .v-demo { margin-top: 10px; font-weight: 400; }
+@media (max-width: 530px) {
+  .voucher-heading { width: 60%; min-height: 200px; padding: 22px 16px; }
+  .voucher-cover img { width: 40%; }
+  .voucher-flow .thanks-visual { min-height: 220px; }
+}
+@media print {
+  .voucher-flow { background: white; }
+  .voucher-flow .print-sheet { width: 100%; }
+  .voucher-flow .printable { box-shadow: none; border: 1px solid #c9aaa1; }
+  .voucher-heading { min-height: 50mm; color: #3c1d26; background: #f5eee3; }
+  .voucher-heading .v-kind { color: #69484c; }
+  .voucher-flow .printable + .printable { break-before: page; }
+}
+
+.voucher-flow .v-code { font: 500 1.05rem/1.4 var(--sans); letter-spacing: normal; overflow-wrap: anywhere; min-width: 0; }
+
+.gift-preview { margin: 0; min-width: 0; }
+.gift-preview figcaption { margin-bottom: 8px; font-size: .875rem; }
+.gift-preview-card {
+  padding: 24px 18px;
+  border: 1px solid #cfb6a7;
+  outline: 1px solid #c9aa99;
+  outline-offset: -6px;
+  background: var(--white);
+  color: var(--wine);
+  font-family: var(--display);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.gift-preview-card strong { font-size: 2rem; font-weight: 400; }
+.gift-preview-card p { margin: 6px 0 0; }
+#preview-for { font-size: 1.25rem; }
+#preview-message { font-style: italic; }

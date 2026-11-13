@@ -46,6 +46,11 @@ try {
     if ($action === 'orders' && $method === 'GET') {
         jsonOut(['orders' => panelOrders(), 'sandbox' => paymoveHosts()['sandbox'], 'now' => time()]);
     }
+    if ($action === 'voucherLookup' && $method === 'POST') {
+        $email = $in['email'] ?? null;
+        if (!is_string($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) jsonOut(['error'=>'Podaj poprawny adres e-mail.'],422);
+        jsonOut(['orders'=>panelOrders(10000, $email)]);
+    }
     if ($action === 'export' && $method === 'GET') {
         header('Content-Type: text/csv; charset=utf-8');
         header('Cache-Control: no-store');

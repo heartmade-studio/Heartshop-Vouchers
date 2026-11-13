@@ -69,13 +69,13 @@ Back up SQLite using its backup API/CLI `.backup`, including a tested restore; d
 Run `bash scripts/heartshop/check.sh`, then exercise your HTTPS sandbox installation:
 
 - Successful payment, cancellation, timeout, duplicate and delayed signed events, amount mismatch and changed provider ID. Only verified paid events may release goods or vouchers.
-- Voucher issuance, printable code and redemption/undo. Establish the separate merchant invoicing process before live selling.
+- Voucher issuance, printable/PDF voucher, buyer-email lookup and redemption/undo. Establish the separate merchant invoicing process before live selling.
 - Mail worker failure/retry and actual delivery; panel login/logout and unauthenticated rejection.
 - HTTP redirects, allowed hosts, direct PHP-helper denial, private paths unreachable, backup restoration.
 
 Finally perform an explicitly authorized small live transaction and its operational handling before announcing the merchant shop as live-verified. This repository's initial extraction did not perform real payments, shipment purchases, invoice issuance or outbound mail.
 
-`review` and uncertain attempts require reconciliation against PAYMOVE; do not mark paid by editing SQLite without a reviewed recovery procedure. Refunds and double payments after a late completion are manual merchant operations. Inventory is not reserved or tracked by Heartshop.
+`review` orders and attempts held with `payment_review` require reconciliation against PAYMOVE (uncertain creates recover automatically; see docs/integrations.md); do not mark paid by editing SQLite without a reviewed recovery procedure. Refunds and double payments after a late completion are manual merchant operations. Inventory is not reserved or tracked by Heartshop.
 
 ## Build and hosting acceptance
 
@@ -86,9 +86,21 @@ Root `/` redirects to `/heartshop/`. Test both roots and the Host/TLS noindex gu
 See [hosting options](hosting.md) for the open hosting/operator decision and the
 production HSTS recommendation in [indexing](indexing.md).
 
+## Printable voucher
+
+`twoj-voucher.html` is a two-sided 6×4-inch voucher (front: recipient and dedication; back: service, booking details, expiry) that buyers print or download as a PDF generated in the browser with the bundled jsPDF. Its booking details (phone, address, website) are fictional sample text: replace them in the template before selling. The sample website is styled as a link but not linked, so a dead or later-registered domain is never clickable.
+
+Booking is by the buyer's email address, printed on the voucher; the checkout tells the buyer so. The recipient brings the voucher (printed or on a phone) and gives that address. Each voucher also prints its own number in small type, and the same number appears in both emails and the panel. Nobody has to quote or type it. Choose the level that suits the business:
+
+1. **Email only.** Leave the panel closed (no `PANEL_PASSWORD_HASH`). Each paid order sends the seller an email with the buyer address, the vouchers and their validity; find it in the mailbox when someone comes in.
+2. **Panel.** Search by the buyer email and click *Wykorzystany* on a voucher.
+3. **Panel and number.** Click the voucher whose number matches the presented copy, so several vouchers from one purchase and a second visit with an already used copy can be told apart.
+
+This is a deliberate choice for small businesses selling a few dozen vouchers: anyone who knows the buyer's address could claim a gift, so look at the voucher itself when it is redeemed. Without marking vouchers as used (level 1), nothing prevents a second visit with the same copy, as with handwritten paper vouchers. Demo offers print no label: the demo shop context is enough (owner decision). A real offer paid in the PAYMOVE sandbox prints "Test payment — not valid for a service" on the front face, including in the PDF, and says so in the buyer email; the environment is recorded on the order when it is created, so these vouchers stay labelled after the shop switches to production.
+
 ## Voucher contact line
 
-`voucher_contact` in `api/config.php` is an optional single line (max 160 characters) added to the printable voucher and the buyer email, e.g. how to book the service. It is read from the current configuration, so a changed number also appears on older vouchers' pages; emails already sent keep the old text.
+`voucher_contact` in `api/config.php` is an optional single line (max 160 characters) that replaces the booking note on the printable voucher and is added to the buyer email, e.g. how to book the service. It is read from the current configuration, so a changed number also appears on older vouchers' pages; emails already sent keep the old text.
 
 ## Manual invoice and voucher terms review
 

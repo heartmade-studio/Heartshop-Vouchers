@@ -1,3 +1,4 @@
+/* Dark controls use --deep: the shop theme made --night a light surface. */
 /* Seller's panel: the shop's tokens, quieter. Built phone-first: vouchers get redeemed at the massage table. */
 .panel .site-header .wrap { min-height: 68px; }
 .panel .brand { font-size: 21px; }
@@ -5,19 +6,20 @@
 .login { max-width: 380px; margin: 8vh auto 0; }
 .login h1 { font-size: 44px; }
 .login-form { display: grid; gap: 16px; margin-top: 26px; }
-.login .btn { background: var(--night); color: var(--white); }
+.login .btn { background: var(--deep); color: var(--white); }
 
 .redeem { background: var(--panel); border-radius: 12px; padding: 18px; }
 .redeem-row { display: flex; gap: 10px; }
 .redeem-row input { font: 600 18px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .06em; text-transform: uppercase; }
-.redeem-row .btn { flex: none; min-height: 50px; background: var(--night); color: var(--white); }
+.redeem-row input[type="email"] { font-family: inherit; font-size: 17px; font-weight: 500; letter-spacing: normal; text-transform: none; }
+.redeem-row .btn { flex: none; min-height: 50px; background: var(--deep); color: var(--white); }
 .redeem-result { margin: 12px 0 0; font-size: 14px; }
 .link { border: 0; background: none; padding: 0 0 0 10px; color: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 
 .filters { display: grid; gap: 12px; margin: 26px 0 18px; }
 .views { display: flex; flex-wrap: wrap; gap: 8px; }
 .view { min-height: 40px; padding: 0 14px; border: 1px solid var(--field); border-radius: 999px; background: var(--white); color: var(--ink); font-size: 14px; cursor: pointer; }
-.view.active { background: var(--night); border-color: var(--night); color: var(--white); }
+.view.active { background: var(--deep); border-color: var(--deep); color: var(--white); }
 .view .count { margin-left: 7px; font-variant-numeric: tabular-nums; opacity: .7; }
 .filter-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
 .filter-row input, .filter-row select, .redeem-row input {

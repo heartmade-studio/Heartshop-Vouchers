@@ -43,6 +43,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         assert request('/heartshop/',headers={'Host':'attacker.invalid'})[0]==403
         data={'qty':1,'name':'Test Buyer','email':'buyer@example.invalid','terms':True,'invoice':False}
         if KIND=='goods':data.update(phone='500600700',delivery='kurier',street='Test 1',postcode='00-001',city='Test')
+        else:data.update(recipient='Ania')
         key={'Idempotency-Key':'a'*32}
         assert request('/heartshop/api/order.php',data,dict(key,Origin='http://attacker.invalid'))[0]==403
         wrong=dict(data,offer='masaz-60' if KIND=='goods' else 'magic-box')
@@ -52,7 +53,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         assert request('/__dev/settle',{'orderId':order['orderId']}, {'Origin':'http://attacker.invalid'})[0]==403
         assert request('/__dev/settle',{'orderId':order['orderId']})[1]['status']=='paid'
         status=request('/heartshop/api/status.php?o='+order['orderId'])[1]
-        assert status['status']=='paid' and status['demo'] is True and status['type']==typ
+        assert status['status']=='paid' and status['demo'] is True and status['testPayment'] is True and status['type']==typ
         if KIND=='vouchers':
             assert len(status['vouchers'])==1
             with sqlite3.connect(repo/'var/local/orders.sqlite') as db:
@@ -69,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         cookie=h['Set-Cookie'].split(';')[0]
         code,orders,_=request('/heartshop/api/panel.php?action=orders',headers={'Cookie':cookie});assert code==200 and len(orders['orders'])==1
         if KIND=='vouchers':
-            code,_,_=request('/heartshop/api/panel.php?action=redeem',{'code':status['vouchers'][0]['code']},{'Cookie':cookie});assert code==200
+            code,_,_=request('/heartshop/api/panel.php?action=redeem',{'code':orders['orders'][0]['vouchers'][0]['code']},{'Cookie':cookie});assert code==200
 
         if KIND=='vouchers':
             assert request('/heartshop/api/panel.php?action=resend',{'id':order['orderId']},{'Cookie':cookie})[0]==200
@@ -77,6 +78,16 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
                 bodies=[r[0] for r in db.execute('SELECT body FROM mail_outbox WHERE recipient=?',('buyer@example.invalid',))]
                 assert all('Faktura na żądanie:' in body and 'ZMIENIONA instrukcja:' not in body for body in bodies)
             print('PASS invoice request: checkout snapshot, queued buyer email and resend preserve instructions')
+        # Local simulator: a canceled payment resumes under the same order and can still be paid.
+        retry={'Idempotency-Key':'5'*32}  # keys c-f, 7 and 9 belong to the production checks
+        code,first,_=request('/heartshop/api/order.php',data,retry);assert code==200 and first['redirectUrl'],first
+        assert request('/__dev/settle',{'orderId':first['orderId'],'cancel':True})[1]['status']=='canceled'
+        code,again,_=request('/heartshop/api/order.php',data,retry)
+        assert code==200 and again['orderId']==first['orderId'] and again['redirectUrl']==first['redirectUrl'],again
+        assert request('/__dev/settle',{'orderId':first['orderId']})[1]['status']=='paid'
+        assert request('/heartshop/api/status.php?o='+first['orderId'])[1]['status']=='paid'
+        code,done,_=request('/heartshop/api/order.php',data,retry);assert code==200 and done=={'orderId':first['orderId'],'status':'paid'},done
+        print('PASS local simulator: cancel, retry and pay keep one order')
         assert request('/__dev/paymove.js')[0]==200
         print('PASS actual '+KIND+' distribution: start, boundaries, order, idempotency, simulation, panel and fulfillment isolation')
     finally:
@@ -90,13 +101,15 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
     runner=base/'production.php'
     runner.write_text('''<?php
 $_SERVER['DOCUMENT_ROOT']=$argv[1].'/public';require $argv[1].'/public/heartshop/api/lib.php';
-$input=['qty'=>1,'name'=>'Test Buyer','email'=>'buyer@example.invalid','terms'=>true,'invoice'=>false,'phone'=>'500600700','delivery'=>'kurier','street'=>'Test 1','postcode'=>'00-001','city'=>'Test'];
-$calls=0;
-try { $result=prepareCheckout($input,str_repeat($argv[2],32),function($id)use(&$calls){$calls++;return 'https://checkout.paymove.io/fixture/'.$id;});echo json_encode(['calls'=>$calls,'order'=>findOrder($result['orderId'])]); }
-catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason]);}
+$input=['qty'=>1,'name'=>'Test Buyer','email'=>'buyer@example.invalid','recipient'=>'Ania','terms'=>true,'invoice'=>false,'phone'=>'500600700','delivery'=>'kurier','street'=>'Test 1','postcode'=>'00-001','city'=>'Test'];
+$calls=0;$lost=($argv[3]??'')==='lost';$now=time()+(int)($argv[4]??0);
+// 'lost': the create request never reaches PAYMOVE, leaving the order uncertain.
+$provider=function($id)use(&$calls,$lost){$calls++;if($lost)throw new PaymoveFailure('network',0,7);return 'https://checkout.paymove.io/fixture/'.$id;};
+try { $result=prepareCheckout($input,str_repeat($argv[2],32),$provider,$now);echo json_encode(['calls'=>$calls,'order'=>findOrder($result['orderId'])]); }
+catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason,'orderId'=>$e->orderId]);}
 ''')
     penv=dict(os.environ,HEARTSHOP_ENV_FILE=str(env));penv.pop('HEARTSHOP_ORIGIN',None)
-    def production(key):return json.loads(subprocess.check_output(['php',str(runner),str(repo),key],env=penv))
+    def production(key,mode='',later=0):return json.loads(subprocess.check_output(['php',str(runner),str(repo),key,mode,str(later)],env=penv,stderr=subprocess.DEVNULL))
     p=runtime/'config.php';original=p.read_text()
     a=production('c');assert a['error']=='demo_only' and a['calls']==0
     p.write_text(original.replace("'production_ready' => false","'production_ready' => true"))
@@ -107,6 +120,15 @@ catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason]
     if typ=='voucher':
         a=production('9');assert a['error']=='demo_only' and a['calls']==0  # sample invoice text still blocks
         p.write_text(p.read_text().replace('To przykładowa instrukcja do zatwierdzenia przez sprzedawcę.','Fakturę wystawimy ręcznie.'))
-    a=production('f');assert a['calls']==1 and a['order']['data']['snapshot']['demo'] is False
+    a=production('f');assert a['calls']==1 and a['order']['data']['snapshot']['demo'] is False and a['order']['data']['snapshot']['test_payment'] is False
     assert a['order']['offer_type']==typ
     print('PASS production gates: default denied, each independent gate denied, configured real offer accepted with stub provider')
+    # A recovered retry re-checks the CURRENT gates before creating a payment.
+    r=production('7','lost');assert r['error']=='payment_wait' and r['calls']==1
+    lost_id=r['orderId'];ready=p.read_text()
+    p.write_text(ready.replace("'production_ready' => true","'production_ready' => false"))
+    r=production('7','',10);assert r['error']=='demo_only' and r['calls']==0 and r['orderId']==lost_id
+    p.write_text(ready)
+    # The stub link has no PAYMOVE hash, so the post-create status read holds it for review.
+    r=production('7','',20);assert r['calls']==1 and r['orderId']==lost_id and r['error']=='payment_review',r
+    print('PASS closing sales blocks a recovered create; reopening resumes the same order')

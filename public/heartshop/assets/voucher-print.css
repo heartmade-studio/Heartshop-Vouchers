@@ -1,0 +1,73 @@
+@page { size: 6in 4in; margin: 0; }
+
+.gift-pair {
+  width: 100%;
+  container-type: inline-size;
+  display: grid;
+  gap: 16px;
+  color: var(--wine);
+}
+.gift-face {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  background: var(--cream);
+  box-shadow: 0 8px 24px #3c1d261c;
+  overflow-wrap: anywhere;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.gift-front {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  padding: 6%;
+  border: 1px solid #cfb6a7;
+  outline: 1px solid #c9aa99;
+  outline-offset: -2.5cqw;
+}
+.gift-front h1 { margin: 0 0 3cqw; font-size: 11cqw; }
+.voucher-demo { margin: 0 0 2cqw; padding: .6cqw 1.6cqw; border: 1px solid currentColor; font: 650 1.9cqw/1.2 var(--sans); letter-spacing: .04em; text-transform: uppercase; }
+.voucher-demo[hidden] { display: none; }
+.gift-for { margin: 0; font: 400 4.4cqw/1.2 var(--display); }
+.gift-message { margin: 2cqw 0 0; font: italic 400 3.6cqw/1.25 var(--display); }
+.gift-back { display: grid; grid-template-rows: 2fr 1fr; }
+.service-cover { display: grid; grid-template-columns: 47% 53%; min-height: 0; background: var(--wine); color: var(--cream); }
+.service-cover h2 { margin: auto 0; padding: 0 5cqw; font-size: 6.8cqw; }
+.service-cover img { width: 100%; height: 100%; min-height: 0; object-fit: cover; object-position: center 56%; }
+.booking-details { align-self: center; padding: 1.2cqw 4cqw; font: 400 2.05cqw/1.22 var(--sans); }
+.booking-details dl { display: grid; grid-template-columns: 1.2fr 1fr; gap: .6cqw 2cqw; margin: 0; }
+.booking-details dt, .booking-details dd { display: inline; margin: 0; }
+.booking-details dt { font-weight: 650; }
+.booking-link { text-decoration: underline; text-underline-offset: .15em; text-decoration-thickness: 1px; }
+.booking-details p { border-top: 1px solid #cbb3a7; padding-top: 1cqw; margin: 1cqw 0 .4cqw; }
+.gift-status, .voucher-number { color: #675050; font-size: 1.65cqw; }
+.voucher-number { display: block; }
+@media screen and (max-width: 600px) {
+  .booking-details { font-size: 12px; padding: 14px; }
+  .booking-details dl { grid-template-columns: 1fr; gap: 3px; }
+  .gift-status, .voucher-number { font-size: 10px; }
+  .gift-back { aspect-ratio: auto; grid-template-rows: auto auto; }
+  .service-cover { aspect-ratio: 9 / 4; }
+}
+@media print {
+  html, body, .voucher-page .print-sheet, .voucher-page .vouchers, .gift-pair {
+    display: block; margin: 0; padding: 0; width: 6in; max-width: none;
+  }
+  .gift-face { height: 4in; box-shadow: none; break-inside: avoid; break-after: page; }
+  .gift-pair:last-child .gift-back { break-after: auto; }
+}
+
+@media screen and (max-width: 600px) {
+  .voucher-page .voucher-header .wrap { flex-wrap: wrap; gap: 8px; padding-block: 10px; }
+  .voucher-page .header-end { gap: 8px; }
+  .voucher-page .header-end .btn { min-height: 44px; padding: 9px 14px; }
+}
+
+#print-pages { display: none; }
+@media print {
+  .print-pages-ready .print-sheet { display: none; }
+  .print-pages-ready #print-pages { display: block; }
+  #print-pages img { display: block; width: 6in; height: 4in; break-after: page; }
+  #print-pages img:last-child { break-after: auto; }
+}

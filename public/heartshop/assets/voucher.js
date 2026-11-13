@@ -7,17 +7,18 @@ const I = HeartshopI18n, t = I.t;
 function card(o, v) {
   const el = $("voucher-template").content.firstElementChild.cloneNode(true);
   const set = (sel, text) => { const n = el.querySelector(sel); n.textContent = text; n.hidden = !text; };
-  set(".v-kind", t("voucher.title"));
-  el.querySelector(".v-demo").hidden = !o.demo;
-  set(".v-product", o.product);
-  set(".v-for", o.recipient ? t("voucher.for", { name: o.recipient }) : "");
-  set(".v-dedication", o.dedication);
-  set(".v-code-label", t("voucher.code"));
-  set(".v-code", v.code);
-  set(".v-valid", v.status === "used" ? t("voucher.used") : t("voucher.valid", { date: v.expires }));
-  set(".v-how", o.contact ? `${t("voucher.how")} ${o.contact}` : t("voucher.how"));
-  set(".v-seller", o.seller);
-  el.classList.toggle("used", v.status === "used");
+  // Demo offers stay unlabelled (owner decision: the demo shop is self-evident). Only a real
+  // offer paid in the PAYMOVE sandbox is marked on the printed face, so a forwarded PDF says it.
+  el.querySelector(".voucher-demo").hidden = o.demo || !o.testPayment;
+  // Older orders may have no recipient: print no name rather than an invented one.
+  set(".gift-for", o.recipient ? t("voucher.for", { name: o.recipient }) : "");
+  set(".gift-message", o.dedication || t("voucher.defaultDedication"));
+  set(".service-cover h2", o.product);
+  set(".booking-email", o.buyerEmail);
+  set(".booking-code", v.code);
+  set(".booking-expiry", v.expires);
+  set(".gift-status", v.status === "used" ? t("voucher.used") : "");
+  if (o.contact) set(".booking-note", o.contact);
   return el;
 }
 
@@ -37,7 +38,30 @@ async function load() {
   }
   $("vouchers").replaceChildren(...o.vouchers.map(v => card(o, v)));
   $("print").hidden = false;
+  $("download").hidden = false;
 }
 
-$("print").addEventListener("click", () => print());
+let pageImages;
+async function outputVoucher(action) {
+  const button = $(action);
+  const label = button.textContent;
+  $("print").disabled = $("download").disabled = true;
+  button.textContent = "Przygotowuję…";
+  $("download-error").hidden = true;
+  try {
+    const { renderVoucherPages, downloadVoucher, preparePrint } = await import("./voucher-download.js?v=2");
+    pageImages ??= await renderVoucherPages($("vouchers"));
+    await preparePrint(pageImages);
+    if (action === "download") await downloadVoucher(pageImages);
+    else print();
+  } catch {
+    if (action === "print") print();
+    else $("download-error").hidden = false;
+  } finally {
+    button.textContent = label;
+    $("print").disabled = $("download").disabled = false;
+  }
+}
+$("print").addEventListener("click", () => outputVoucher("print"));
+$("download").addEventListener("click", () => outputVoucher("download"));
 load();

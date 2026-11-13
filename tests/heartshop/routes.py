@@ -47,8 +47,8 @@ echo json_encode(['input'=>$input,'result'=>$result,'voucher'=>$voucher]);
                 response = e
             with response:
                 return response.status, json.loads(response.read()), response.headers
-        def event(status, price, order=None):
-            raw = json.dumps({'externalId': order or seeded['result']['orderId'], 'status': status, 'price': price, 'orderId': 'fixture-pm'}).encode()
+        def event(status, price, order=None, provider='fixture-pm'):
+            raw = json.dumps({'externalId': order or seeded['result']['orderId'], 'status': status, 'price': price, 'orderId': provider}).encode()
             stamp = str(int(time.time()))
             signature = base64.b64encode(hmac.new(b'synthetic-signing-only', stamp.encode()+b'.'+raw, hashlib.sha256).digest()).decode()
             return request('webhook.php', raw, {'X-Paymove-Signature': f't={stamp},v1={signature}'})
@@ -64,13 +64,28 @@ echo json_encode(['input'=>$input,'result'=>$result,'voucher'=>$voucher]);
             headers = {'Origin': 'https://staging.shop.example.com', 'Idempotency-Key': 'a'*32, 'Content-Type': 'application/json'}
             payload = json.dumps(seeded['input']).encode()
             code, body, hdr = request('order.php', payload, headers)
-            assert code == 200 and body == seeded['result'] and hdr['Cache-Control'] == 'no-store'
+            # The synthetic URL deliberately has no real Paymove payment hash.
+            # A resumed uncheckable payment is held, never replaced by a new order.
+            assert code == 409 and body['code'] == 'payment_review' and body['orderId'] == seeded['result']['orderId']
+            assert hdr['Cache-Control'] == 'no-store' and hdr.get('Retry-After') is None
             assert request('order.php', payload)[0] == 403
             changed = dict(seeded['input'], qty=2)
             assert request('order.php', json.dumps(changed).encode(), headers)[0] == 409
             invalid = dict(seeded['input'], email='bad')
             assert request('order.php', json.dumps(invalid).encode(), dict(headers, **{'Idempotency-Key': 'b'*32}))[0] == 422
             assert request('webhook.php', b'{}')[0] == 401
+            assert event('ERROR', 0, provider='fixture-failed')[1]['status'] == 'canceled'
+            assert request('status.php?o='+seeded['result']['orderId'])[1]['status'] == 'canceled'
+            # Model the unsigned PENDING observation from resuming that same purchase.
+            hint = private/'hint.php'
+            hint.write_text('''<?php
+$_SERVER['DOCUMENT_ROOT']=$argv[1];require $argv[1].'/public/heartshop/api/lib.php';
+$s=db()->prepare('UPDATE orders SET data=json_set(data,"$.payment_observation",json(:hint)) WHERE external_id=:id');
+$s->bindValue(':hint',json_encode(['status'=>'PENDING','order_id'=>'fixture-pm']));$s->bindValue(':id',$argv[2]);$s->execute();
+''')
+            subprocess.check_call(['php',str(hint),str(ROOT),seeded['result']['orderId']],env=env)
+            assert request('status.php?o='+seeded['result']['orderId'])[1]['status'] == 'pending'
+            # A new signed provider transaction ID for the same failed purchase is valid.
             assert event('COMPLETED', seeded['result']['total'])[1]['status'] == 'paid'
             assert event('COMPLETED', seeded['result']['total'])[1]['changed'] is False
             assert event('CANCELED', 0)[1]['status'] == 'paid'
@@ -80,7 +95,7 @@ echo json_encode(['input'=>$input,'result'=>$result,'voucher'=>$voucher]);
             assert event('COMPLETED', seeded['voucher']['total'], voucher)[1]['status'] == 'paid'
             code, status, _ = request(f'status.php?o={voucher}')
             assert code == 200 and status['type'] == 'voucher' and status['recipient'] == 'Ania' and len(status['vouchers']) == 1
-            voucher_code = status['vouchers'][0]['code']
+            assert status['buyerEmail'] == 'giver@example.invalid' and status['vouchers'][0]['code']  # booking by email; the number tells copies apart
             queue = json.loads(subprocess.check_output(['php', str(ROOT/'scripts/heartshop/retry-mail.php'), '--status', str(ROOT/'public/heartshop/api/lib.php')], env=env))
             assert queue['queue'] == [{'status': 'pending', 'count': 4, 'max_attempts': 0}]
 
@@ -97,6 +112,11 @@ echo json_encode(['input'=>$input,'result'=>$result,'voucher'=>$voucher]);
             session = dict(origin, Cookie=cookie.split(';')[0])
             code, listed, _ = request('panel.php?action=orders', headers=session)
             assert code == 200 and {o['type'] for o in listed['orders']} == {'shipping', 'voucher'}
+            lookup = json.dumps({'email':'GIVER@example.invalid'}).encode()
+            assert request('panel.php?action=voucherLookup', lookup, origin)[0] == 401
+            found = request('panel.php?action=voucherLookup', lookup, session)[1]['orders']
+            assert len(found) == 1 and found[0]['id'] == voucher
+            voucher_code = found[0]['vouchers'][0]['code']
             redeem = json.dumps({'code': voucher_code.lower()}).encode()
             assert request('panel.php?action=redeem', redeem, {'Cookie': session['Cookie'], 'Content-Type': 'application/json'})[0] == 403
             code, redeemed, _ = request('panel.php?action=redeem', redeem, session)
@@ -144,7 +164,7 @@ echo json_encode($r);
 $_SERVER['DOCUMENT_ROOT']=$argv[1];require $argv[1].'/public/heartshop/api/lib.php';
 $common=['qty'=>1,'email'=>'test@example.invalid','name'=>'Test Buyer','invoice'=>false,'terms'=>true];
 $box=$common+['offer'=>'magic-box','phone'=>'500600700','delivery'=>'kurier','street'=>'Test 1','postcode'=>'00-001','city'=>'Test'];
-$voucher=$common+['offer'=>'masaz-60'];
+$voucher=$common+['offer'=>'masaz-60','recipient'=>'Ani'];
 foreach ([$box,$voucher] as $i=>$input) {
  try { prepareCheckout($input,str_repeat((string)($i+1),32),fn()=>throw new Exception('provider called')); exit(1); }
  catch (CheckoutProblem $e) { if ($e->reason!=='demo_only') throw $e; }

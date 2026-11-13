@@ -22,10 +22,10 @@ try {
     $input=['qty'=>1,'email'=>'test@example.invalid','phone'=>'500600700','name'=>'TEST Person','delivery'=>'kurier',
             'street'=>'Test 1','postcode'=>'00-001','city'=>'Test','invoice'=>false,'terms'=>true];
     $calls=0;
-    $provider=function($id,$number,$order,$total) use (&$calls) { $calls++; return 'https://checkout.sandbox.paymove.io/fixture/'.$id; };
+    $provider=function($id,$number,$order,$total) use (&$calls) { $calls++; return 'https://pay.sandbox.paymove.io/fixture/'.$id; };
     $key=str_repeat('a',32);
     $one=prepareCheckout($input,$key,$provider);
-    $two=prepareCheckout($input,$key,$provider);
+    $two=prepareCheckout($input,$key,$provider,null,fn()=>'INITIALIZED');
     check($one['orderId']===$two['orderId'] && $calls===1, 'same key reuses single provider creation and order');
     rejected(fn()=>prepareCheckout(array_replace($input,['qty'=>2]),$key,$provider),409,'same key changed payload rejected');
     rejected(fn()=>prepareCheckout(array_replace($input,['email'=>'bad']),$key,$provider),409,'existing key checked before validation');
@@ -63,9 +63,9 @@ try {
     check(verifySignature($sig,$body),'valid raw-body signature');
     check(!verifySignature($sig,$body.' '),'mutated body rejected');
     check(!verifySignature('t=1,v1='.base64_encode(str_repeat('x',32)),$body),'stale signature rejected');
-    check(validPaymentUrl('https://checkout.sandbox.paymove.io/a','checkout.sandbox.paymove.io'),'approved HTTPS redirect');
-    foreach (['http://checkout.sandbox.paymove.io/a','https://checkout.sandbox.paymove.io.evil.invalid/a','https://user@checkout.sandbox.paymove.io/a','https://checkout.sandbox.paymove.io:444/a'] as $url) {
-        check(!validPaymentUrl($url,'checkout.sandbox.paymove.io'),'unsafe payment redirect rejected');
+    check(validPaymentUrl('https://checkout.sandbox.paymove.io/a'),'approved HTTPS redirect');
+    foreach (['https://pay.sandbox.paymove.io.evil.invalid/a','https://pay.paymove.io/a','http://checkout.sandbox.paymove.io/a','https://checkout.sandbox.paymove.io.evil.invalid/a','https://user@checkout.sandbox.paymove.io/a','https://checkout.sandbox.paymove.io:444/a'] as $url) {
+        check(!validPaymentUrl($url),'unsafe payment redirect rejected');
     }
     $now=1800000000;
     for($i=0;$i<20;$i++) check(rateLimit('192.0.2.1',$now),'rate allowed '.$i);
@@ -75,13 +75,13 @@ try {
     check($spread,'many addresses cannot lock the shop with POSTs alone');
     check(($snap['delivery_eta']??null)===cfg()['delivery']['kurier']['eta'],'snapshot keeps promised dispatch time');
     $capNow=1900000000;$capCalls=0;
-    $counting=function($id) use (&$capCalls) { $capCalls++; return 'https://checkout.sandbox.paymove.io/fixture/'.$id; };
+    $counting=function($id) use (&$capCalls) { $capCalls++; return 'https://pay.sandbox.paymove.io/fixture/'.$id; };
     for($i=0;$i<50;$i++) rejected(fn()=>prepareCheckout(array_replace($input,['email'=>'bad']),sprintf('%032x',10000+$i),$counting,$capNow),422,'invalid order before cap');
     for($i=0;$i<200;$i++) prepareCheckout($input,sprintf('%032x',20000+$i),$counting,$capNow);
     check($capCalls===200,'invalid orders do not consume the new-payment cap');
     rejected(fn()=>prepareCheckout($input,sprintf('%032x',30000),$counting,$capNow),429,'new-payment cap holds');
     check($capCalls===200,'capped attempt never reaches the provider');
-    $again=prepareCheckout($input,sprintf('%032x',20000),$counting,$capNow);
+    $again=prepareCheckout($input,sprintf('%032x',20000),$counting,$capNow,fn()=>'INITIALIZED');
     check(isset($again['redirectUrl']) && $capCalls===200,'existing attempt retry is not capped');
     check((fileperms($private.'/orders.sqlite') & 0777)===0600,'database created mode 0600');
     $bad=$root.'/public/heartshop/api/config.php';
@@ -100,6 +100,13 @@ try {
     $vin=['offer'=>'masaz-60','qty'=>2,'email'=>'gift@example.invalid','name'=>'TEST Giver','recipient'=>'Ania','dedication'=>'Na spokojny wieczór','invoice'=>false,'terms'=>true];
     [$vo,$ve]=validateOrder($vin);
     check($ve===[] && $vo['offer']==='masaz-60' && $vo['recipient']==='Ania','voucher needs no phone, delivery or address');
+    check(isset(validateOrder(array_replace($vin,['recipient'=>'   ']))[1]['recipient']),'blank voucher recipient rejected');
+    foreach (['dedication'=>'Wejdź na https://x.example','recipient'=>'Ani www.x','name'=>'TEST evil.com/login'] as $field=>$value) {
+        check(validateOrder(array_replace($vin,[$field=>$value]))[1][$field]==='Bez linków i adresów stron. Po kropce dodaj spację.',"link in $field rejected");
+    }
+    check(validateOrder(array_replace($vin,['dedication'=>'Wszystkiego dobrego. Ściskam! J.R.R. Tolkien']))[1]===[],'ordinary dedication with dots accepted');
+    check(clean("A\u{202E}moc.live\u{0007} B")==='Amoc.live B','bidi and control characters stripped');
+    check(validOrderId('hs_'.str_repeat('a',24)) && !validOrderId('hs_'.str_repeat('a',24)."\n") && !validOrderId(['x']),'order id format is strict');
     check(!isset($vo['phone']) && !isset($vo['street']),'voucher order stores no shipping data');
     check(validateOrder(array_replace($vin,['offer'=>'nope']))[1]===['offer'=>'Ten produkt nie jest już dostępny. Odśwież stronę.'],'unknown offer rejected');
     check(validateOrder(array_replace($vin,['qty'=>6]))[1]['qty']==='Wybierz od 1 do 5 sztuk.','per-offer quantity limit');
@@ -111,8 +118,13 @@ try {
     check($vorder['total']===50000 && $vorder['data']['snapshot']['shipping']===0 && $vorder['data']['snapshot']['type']==='voucher','voucher total has no shipping');
     check($vorder['offer_type']==='voucher' && $vorder['data']['snapshot']['valid_months']===12 && $vorder['data']['snapshot']['path']==='voucher/','voucher snapshot keeps type, validity and page');
     check($vorder['data']['snapshot']['demo']===true,'new demo voucher records its identity');
-    $legacyVoucher=$vorder; unset($legacyVoucher['data']['snapshot']['demo']);
-    check(!str_contains(voucherBuyerMail($legacyVoucher,'Test','CODE'),'demonstracyjny'),'historical voucher mail does not claim demo status');
+    check($vorder['data']['snapshot']['test_payment']===true,'sandbox order records its test payment');
+    $sandboxReal=$vorder; $sandboxReal['data']['snapshot']['demo']=false;
+    $mail=voucherBuyerMail($sandboxReal,'Test','CODE');
+    check(str_contains($mail,'płatności testowej') && !str_contains($mail,'Płatność dotarła'),'real offer paid in the sandbox is mailed as a test payment');
+    $legacyVoucher=$vorder; unset($legacyVoucher['data']['snapshot']['demo'],$legacyVoucher['data']['snapshot']['test_payment']);
+    $mail=voucherBuyerMail($legacyVoucher,'Test','CODE');
+    check(!str_contains($mail,'demonstracyjny') && !str_contains($mail,'płatności testowej'),'historical voucher mail claims neither demo nor test status');
     // The pre-voucher implementation, verbatim: an attempt open during the deploy keeps its fingerprint.
     $old=array_intersect_key($input,array_flip(['qty','email','phone','name','delivery','point','point_label','street','postcode','city','invoice','company','nip','company_address','terms']));ksort($old);
     check(requestFingerprint($input)===hash('sha256',json_encode($old,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE)),'candle fingerprint unchanged by new keys');
@@ -129,10 +141,10 @@ try {
     check(count(vouchersFor($vp['orderId']))===2,'duplicate webhook issues no extra codes');
     $vmails=[];$r=db()->query("SELECT * FROM mail_outbox WHERE order_external_id='{$vp['orderId']}' ORDER BY id");while($m=$r->fetchArray(SQLITE3_ASSOC))$vmails[]=$m;
     check(count($vmails)===2 && (int)db()->querySingle('SELECT COUNT(*) FROM mail_outbox')===$mailsBefore+2,'voucher payment queues buyer and seller mail once');
-    check(str_contains($vmails[0]['body'],$codes[0]['code']) && str_contains($vmails[0]['body'],$codes[1]['code']),'buyer mail carries every code');
+    check(str_contains($vmails[0]['body'],$vin['email']) && str_contains($vmails[0]['body'],'Voucher 2 · nr '.$codes[1]['code']) && str_contains($vmails[0]['body'],$codes[0]['code']),'buyer mail books by email and numbers each unit');
     check(str_contains($vmails[0]['body'],'https://shop.example.com/heartshop/voucher/twoj-voucher.html?o='.$vp['orderId']),'buyer mail links the printable voucher');
     check(!str_contains($vmails[0]['body'],'paczk') && !str_contains($vmails[0]['body'],'Wysyłamy'),'voucher mail promises no parcel');
-    check(str_contains($vmails[0]['body'],'Dla: Ania') && str_contains($vmails[1]['body'],$codes[1]['code']),'recipient in summary; seller sees the codes');
+    check(str_contains($vmails[0]['body'],'Dla: Ania') && str_contains($vmails[1]['body'],$vin['email']),'recipient in summary; seller sees the codes');
     $rv=prepareCheckout(array_replace($vin,['qty'=>1]),str_repeat('d',32),$provider);
     applyPaymentEvent(['externalId'=>$rv['orderId'],'status'=>'COMPLETED','price'=>'100','orderId'=>'pm-x']);
     check(findOrder($rv['orderId'])['status']==='review' && vouchersFor($rv['orderId'])===[],'review payment issues no codes');
@@ -173,7 +185,7 @@ try {
     $before=(int)db()->querySingle('SELECT COUNT(*) FROM mail_outbox');
     panelResend($vp['orderId'],$pnow);
     $resent=db()->querySingle('SELECT body FROM mail_outbox ORDER BY id DESC LIMIT 1');
-    check((int)db()->querySingle('SELECT COUNT(*) FROM mail_outbox')===$before+1 && str_contains($resent,$codes[1]['code']),'resend queues the buyer mail again');
+    check((int)db()->querySingle('SELECT COUNT(*) FROM mail_outbox')===$before+1 && str_contains($resent,$vin['email']),'resend queues the buyer mail again');
     try { panelResend($rv['orderId'],$pnow); throw new RuntimeException('FAIL resend review'); }
     catch (PanelProblem $e) { check($e->httpStatus===409,'no confirmation for an unconfirmed payment'); }
     $csv=panelCsv([array_replace($row,['name'=>'=HYPERLINK("x")','note'=>'a"b'])]);

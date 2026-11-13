@@ -34,6 +34,7 @@ try {
     jsonOut(prepareCheckout($in,$_SERVER['HTTP_IDEMPOTENCY_KEY'] ?? ''));
 } catch (CheckoutProblem $e) {
     if ($e->httpStatus===429) header('Retry-After: '.(600-time()%600));
+    if ($e->retryAfter!==null) header('Retry-After: '.$e->retryAfter);
     $body=['error'=>$e->getMessage(),'code'=>$e->reason];
     if ($e->orderId!==null) $body['orderId']=$e->orderId;
     if ($e->errors) $body['errors']=$e->errors;
