@@ -22,8 +22,8 @@
   print and in-browser PDF download (bundled jsPDF 4.2.1, MIT). Recipient is
   required for new orders; older vouchers without one print no name. Booking is by
   the buyer email; each voucher also shows its own number (voucher, mails,
-  panel) for sellers who want to tell copies apart. Demo vouchers carry the demo
-  label on the printed face. Invoice fields removed from the voucher checkout (manual invoice
+  panel) for sellers who want to tell copies apart. Demo vouchers print no demo
+  label. Invoice fields removed from the voucher checkout (manual invoice
   instructions unchanged).
 - Retried payment creation re-checks the current production gates; the local
   simulator supports cancel → retry → pay on the same order.
@@ -31,6 +31,8 @@
   a light surface); buyer-email lookup field no longer uppercased.
 - Orders record whether they were paid in the PAYMOVE sandbox. A real offer paid
   there is labelled as a test payment on the printed voucher, PDF and buyer mail.
+- Postcode field renamed (`postal`) so Safari no longer offers passwords on it;
+  PAYMOVE methods listed without fast bank transfers; booking note on two lines.
 - Payment recovery: a lost PAYMOVE create response is resumed under the same
   `externalId` with the frozen order; resumed checkouts read the payment status
   first, signed failed transactions are audited and diagnostics stay data-free.

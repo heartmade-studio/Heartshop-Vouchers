@@ -172,7 +172,7 @@ function collect() {
     if (d === "paczkomat") Object.assign(data, cfg.geowidgetToken
       ? { point: point.code, point_label: point.label }
       : { point: v("point-input").toUpperCase(), point_label: "" });
-    Object.assign(data, { street: v("street"), postcode: v("postcode"), city: v("city") });
+    Object.assign(data, { street: v("street"), postcode: v("postal"), city: v("city") });
   } else {
     Object.assign(data, { name: v("name"), recipient: v("recipient"), dedication: v("dedication"),
       invoice: Boolean($("invoice")?.checked), terms: $("terms").checked });
@@ -228,14 +228,14 @@ function focusFirstError() {
 }
 
 // ---------- input helpers (shipping fields exist only on a shipped product's page) ----------
-$("postcode")?.addEventListener("input", e => {
+$("postal")?.addEventListener("input", e => {
   const digits = e.target.value.replace(/\D/g, "").slice(0, 5);
   e.target.value = digits.length > 2 ? `${digits.slice(0, 2)}-${digits.slice(2)}` : digits;
 });
 $("point-input")?.addEventListener("input", e => { e.target.value = e.target.value.toUpperCase(); });
 
 // ---------- draft (survives a cancelled payment or a reload) ----------
-const DRAFT_FIELDS = ["email", "phone", "name", "street", "postcode", "city", "recipient", "dedication",
+const DRAFT_FIELDS = ["email", "phone", "name", "street", "postal", "city", "recipient", "dedication",
   "company", "nip", "company_address", "point-input"].filter(id => $(id));
 function saveDraft() {
   const d = { qty, delivery: selectedDelivery(), invoice: Boolean($("invoice")?.checked), point };

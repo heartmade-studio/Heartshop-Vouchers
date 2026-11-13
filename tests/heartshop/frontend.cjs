@@ -82,7 +82,7 @@ test('broken or unavailable attempt storage cannot silently create another payme
 async function checkout(store, file='zamowienie.html', lang='pl', dataset={}) {
   const p=page(file,store,lang,dataset);p.run('attempt.js');p.run('checkout.js');
   vm.runInContext(`cfg={product:{price:4900,max_qty:10},delivery:{kurier:{price:1699}},freeShippingFrom:null,geowidgetToken:''}`,p.context);
-  for (const [k,v] of Object.entries({email:'test@example.invalid',phone:'500600700',name:'TEST Person',street:'Test 1',postcode:'00-001',city:'Test'})) p.element(k).value=v;
+  for (const [k,v] of Object.entries({email:'test@example.invalid',phone:'500600700',name:'TEST Person',street:'Test 1',postal:'00-001',city:'Test'})) p.element(k).value=v;
   p.element('terms').checked=true;
   return p;
 }
@@ -523,7 +523,7 @@ function voucherCard(o, v = {code:'K7PM-4QXT', status:'active', expires:'31.12.2
   const p = page('twoj-voucher.html');
   const parts = new Map();
   const face = {cloneNode:() => face, querySelector:sel => {
-    if (!parts.has(sel)) parts.set(sel, {textContent:sel === '.voucher-demo' ? 'DEMO' : '', hidden:false});
+    if (!parts.has(sel)) parts.set(sel, {textContent:sel === '.voucher-demo' ? 'Płatność testowa — voucher nie uprawnia do usługi' : '', hidden:false});
     return parts.get(sel);
   }};
   p.element('voucher-template').content = {firstElementChild:face};
@@ -537,8 +537,8 @@ test('printed voucher books by buyer email and shows its own number',()=>{
   assert.equal(part('.booking-code').textContent,'K7PM-4QXT');
   assert.equal(part('.gift-for').textContent,'Dla Ani');
 });
-test('demo voucher carries the demo label on its printed face',()=>{
-  assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:true})('.voucher-demo').hidden,false);
+test('demo voucher prints no demo label (owner decision)',()=>{
+  assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:true,testPayment:true})('.voucher-demo').hidden,true);
   assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:false})('.voucher-demo').hidden,true);
 });
 test('older voucher without a recipient prints no invented name',()=>{

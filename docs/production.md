@@ -88,7 +88,7 @@ production HSTS recommendation in [indexing](indexing.md).
 
 ## Printable voucher
 
-`twoj-voucher.html` is a two-sided 6×4-inch voucher (front: recipient and dedication; back: service, booking details, expiry) that buyers print or download as a PDF generated in the browser with the bundled jsPDF. Its booking details (phone, address, website) are fictional sample text: replace them in the template before selling.
+`twoj-voucher.html` is a two-sided 6×4-inch voucher (front: recipient and dedication; back: service, booking details, expiry) that buyers print or download as a PDF generated in the browser with the bundled jsPDF. Its booking details (phone, address, website) are fictional sample text: replace them in the template before selling. The sample website is styled as a link but not linked, so a dead or later-registered domain is never clickable.
 
 Booking is by the buyer's email address, printed on the voucher; the checkout tells the buyer so. The recipient brings the voucher (printed or on a phone) and gives that address. Each voucher also prints its own number in small type, and the same number appears in both emails and the panel. Nobody has to quote or type it. Choose the level that suits the business:
 
@@ -96,7 +96,7 @@ Booking is by the buyer's email address, printed on the voucher; the checkout te
 2. **Panel.** Search by the buyer email and click *Wykorzystany* on a voucher.
 3. **Panel and number.** Click the voucher whose number matches the presented copy, so several vouchers from one purchase and a second visit with an already used copy can be told apart.
 
-This is a deliberate choice for small businesses selling a few dozen vouchers: anyone who knows the buyer's address could claim a gift, so look at the voucher itself when it is redeemed. Without marking vouchers as used (level 1), nothing prevents a second visit with the same copy, as with handwritten paper vouchers. A demo offer prints a "DEMO — not valid for a service" label on the front face, including in the PDF. A real offer paid in the PAYMOVE sandbox prints "Test payment — not valid for a service" there and says so in the buyer email; the environment is recorded on the order when it is created, so these vouchers stay labelled after the shop switches to production.
+This is a deliberate choice for small businesses selling a few dozen vouchers: anyone who knows the buyer's address could claim a gift, so look at the voucher itself when it is redeemed. Without marking vouchers as used (level 1), nothing prevents a second visit with the same copy, as with handwritten paper vouchers. Demo offers print no label: the demo shop context is enough (owner decision). A real offer paid in the PAYMOVE sandbox prints "Test payment — not valid for a service" on the front face, including in the PDF, and says so in the buyer email; the environment is recorded on the order when it is created, so these vouchers stay labelled after the shop switches to production.
 
 ## Voucher contact line
 

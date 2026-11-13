@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="assets/shop.css?v=10">
 <link rel="stylesheet" href="assets/voucher-landing.css?v=1">
 <link rel="stylesheet" href="assets/voucher-flow.css?v=6">
-<link rel="stylesheet" href="assets/voucher-print.css?v=6">
+<link rel="stylesheet" href="assets/voucher-print.css?v=7">
 </head>
 <body class="voucher-landing voucher-flow voucher-page">
 <header class="voucher-header site-header no-print">
@@ -26,7 +26,7 @@
 <template id="voucher-template">
   <article class="gift-pair">
     <section class="gift-face gift-front" aria-label="Pierwsza strona">
-      <p class="voucher-demo" hidden>DEMO — voucher przykładowy, nie uprawnia do usługi</p>
+      <p class="voucher-demo" hidden>Płatność testowa — voucher nie uprawnia do usługi</p>
       <h1>Voucher</h1>
       <p class="gift-for"></p>
       <p class="gift-message"></p>
@@ -43,7 +43,7 @@
           <div><dt>Adres:</dt> <dd>ul. Masażowa 12, 00-567 Warszawa</dd></div>
           <div><dt>Ważny do:</dt> <dd class="booking-expiry"></dd></div>
         </dl>
-        <p class="booking-note">Zapraszam do kontaktu telefonicznego, żeby umówić dogodny termin. Więcej informacji na stronie piekne-masaze.pl</p>
+        <p class="booking-note">Zapraszam do kontaktu telefonicznego, żeby umówić dogodny termin.<br>Więcej informacji na stronie <span class="booking-link">piekne-masaze.pl</span></p>
         <small class="voucher-number">Nr vouchera: <span class="booking-code"></span></small>
         <small class="gift-status"></small>
       </div>
@@ -51,6 +51,6 @@
   </article>
 </template>
 <script src="assets/i18n.js?v=8"></script>
-<script src="assets/voucher.js?v=25"></script>
+<script src="assets/voucher.js?v=26"></script>
 </body>
 </html>

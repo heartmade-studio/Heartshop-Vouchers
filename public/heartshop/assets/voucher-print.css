@@ -39,6 +39,7 @@
 .booking-details dl { display: grid; grid-template-columns: 1.2fr 1fr; gap: .6cqw 2cqw; margin: 0; }
 .booking-details dt, .booking-details dd { display: inline; margin: 0; }
 .booking-details dt { font-weight: 650; }
+.booking-link { text-decoration: underline; text-underline-offset: .15em; text-decoration-thickness: 1px; }
 .booking-details p { border-top: 1px solid #cbb3a7; padding-top: 1cqw; margin: 1cqw 0 .4cqw; }
 .gift-status, .voucher-number { color: #675050; font-size: 1.65cqw; }
 .voucher-number { display: block; }

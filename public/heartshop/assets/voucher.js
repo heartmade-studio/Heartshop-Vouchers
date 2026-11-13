@@ -7,11 +7,9 @@ const I = HeartshopI18n, t = I.t;
 function card(o, v) {
   const el = $("voucher-template").content.firstElementChild.cloneNode(true);
   const set = (sel, text) => { const n = el.querySelector(sel); n.textContent = text; n.hidden = !text; };
-  // The label sits on the printed face, so a forwarded PDF still says it: a demo offer,
-  // or a real offer paid in the PAYMOVE sandbox (recorded on the order).
-  const label = el.querySelector(".voucher-demo");
-  label.hidden = !o.demo && !o.testPayment;
-  if (!o.demo && o.testPayment) label.textContent = "Płatność testowa — voucher nie uprawnia do usługi";
+  // Demo offers stay unlabelled (owner decision: the demo shop is self-evident). Only a real
+  // offer paid in the PAYMOVE sandbox is marked on the printed face, so a forwarded PDF says it.
+  el.querySelector(".voucher-demo").hidden = o.demo || !o.testPayment;
   // Older orders may have no recipient: print no name rather than an invented one.
   set(".gift-for", o.recipient ? t("voucher.for", { name: o.recipient }) : "");
   set(".gift-message", o.dedication || t("voucher.defaultDedication"));
