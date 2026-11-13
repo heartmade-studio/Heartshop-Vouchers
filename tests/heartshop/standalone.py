@@ -78,6 +78,16 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
                 bodies=[r[0] for r in db.execute('SELECT body FROM mail_outbox WHERE recipient=?',('buyer@example.invalid',))]
                 assert all('Faktura na żądanie:' in body and 'ZMIENIONA instrukcja:' not in body for body in bodies)
             print('PASS invoice request: checkout snapshot, queued buyer email and resend preserve instructions')
+        # Local simulator: a canceled payment resumes under the same order and can still be paid.
+        retry={'Idempotency-Key':'5'*32}  # keys c-f, 7 and 9 belong to the production checks
+        code,first,_=request('/heartshop/api/order.php',data,retry);assert code==200 and first['redirectUrl'],first
+        assert request('/__dev/settle',{'orderId':first['orderId'],'cancel':True})[1]['status']=='canceled'
+        code,again,_=request('/heartshop/api/order.php',data,retry)
+        assert code==200 and again['orderId']==first['orderId'] and again['redirectUrl']==first['redirectUrl'],again
+        assert request('/__dev/settle',{'orderId':first['orderId']})[1]['status']=='paid'
+        assert request('/heartshop/api/status.php?o='+first['orderId'])[1]['status']=='paid'
+        code,done,_=request('/heartshop/api/order.php',data,retry);assert code==200 and done=={'orderId':first['orderId'],'status':'paid'},done
+        print('PASS local simulator: cancel, retry and pay keep one order')
         assert request('/__dev/paymove.js')[0]==200
         print('PASS actual '+KIND+' distribution: start, boundaries, order, idempotency, simulation, panel and fulfillment isolation')
     finally:
@@ -92,12 +102,14 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
     runner.write_text('''<?php
 $_SERVER['DOCUMENT_ROOT']=$argv[1].'/public';require $argv[1].'/public/heartshop/api/lib.php';
 $input=['qty'=>1,'name'=>'Test Buyer','email'=>'buyer@example.invalid','recipient'=>'Ania','terms'=>true,'invoice'=>false,'phone'=>'500600700','delivery'=>'kurier','street'=>'Test 1','postcode'=>'00-001','city'=>'Test'];
-$calls=0;
-try { $result=prepareCheckout($input,str_repeat($argv[2],32),function($id)use(&$calls){$calls++;return 'https://checkout.paymove.io/fixture/'.$id;});echo json_encode(['calls'=>$calls,'order'=>findOrder($result['orderId'])]); }
-catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason]);}
+$calls=0;$lost=($argv[3]??'')==='lost';$now=time()+(int)($argv[4]??0);
+// 'lost': the create request never reaches PAYMOVE, leaving the order uncertain.
+$provider=function($id)use(&$calls,$lost){$calls++;if($lost)throw new PaymoveFailure('network',0,7);return 'https://checkout.paymove.io/fixture/'.$id;};
+try { $result=prepareCheckout($input,str_repeat($argv[2],32),$provider,$now);echo json_encode(['calls'=>$calls,'order'=>findOrder($result['orderId'])]); }
+catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason,'orderId'=>$e->orderId]);}
 ''')
     penv=dict(os.environ,HEARTSHOP_ENV_FILE=str(env));penv.pop('HEARTSHOP_ORIGIN',None)
-    def production(key):return json.loads(subprocess.check_output(['php',str(runner),str(repo),key],env=penv))
+    def production(key,mode='',later=0):return json.loads(subprocess.check_output(['php',str(runner),str(repo),key,mode,str(later)],env=penv,stderr=subprocess.DEVNULL))
     p=runtime/'config.php';original=p.read_text()
     a=production('c');assert a['error']=='demo_only' and a['calls']==0
     p.write_text(original.replace("'production_ready' => false","'production_ready' => true"))
@@ -111,3 +123,12 @@ catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason]
     a=production('f');assert a['calls']==1 and a['order']['data']['snapshot']['demo'] is False
     assert a['order']['offer_type']==typ
     print('PASS production gates: default denied, each independent gate denied, configured real offer accepted with stub provider')
+    # A recovered retry re-checks the CURRENT gates before creating a payment.
+    r=production('7','lost');assert r['error']=='payment_wait' and r['calls']==1
+    lost_id=r['orderId'];ready=p.read_text()
+    p.write_text(ready.replace("'production_ready' => true","'production_ready' => false"))
+    r=production('7','',10);assert r['error']=='demo_only' and r['calls']==0 and r['orderId']==lost_id
+    p.write_text(ready)
+    # The stub link has no PAYMOVE hash, so the post-create status read holds it for review.
+    r=production('7','',20);assert r['calls']==1 and r['orderId']==lost_id and r['error']=='payment_review',r
+    print('PASS closing sales blocks a recovered create; reopening resumes the same order')

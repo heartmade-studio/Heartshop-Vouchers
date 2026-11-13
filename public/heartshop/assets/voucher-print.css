@@ -27,6 +27,8 @@
   outline-offset: -2.5cqw;
 }
 .gift-front h1 { margin: 0 0 3cqw; font-size: 11cqw; }
+.gift-demo { margin: 0 0 2cqw; padding: .6cqw 1.6cqw; border: 1px solid currentColor; font: 650 1.9cqw/1.2 var(--sans); letter-spacing: .04em; text-transform: uppercase; }
+.gift-demo[hidden] { display: none; }
 .gift-for { margin: 0; font: 400 4.4cqw/1.2 var(--display); }
 .gift-message { margin: 2cqw 0 0; font: italic 400 3.6cqw/1.25 var(--display); }
 .gift-back { display: grid; grid-template-rows: 2fr 1fr; }

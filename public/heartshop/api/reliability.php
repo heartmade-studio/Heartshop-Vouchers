@@ -158,25 +158,25 @@ function paymentNotices(array $order, string $target, array $event): array {
     return $messages;
 }
 
-/** Include the buyer address used for booking and the validity of each voucher. */
+/** The buyer's mail carries each voucher's own code, so it still works if the printable page does not. */
 function voucherNotices(array $order,string $first,string $summary,string $payment,string $merchant,string $seller): array {
     $q=$order['data']['snapshot']; $codes=vouchersFor($order['external_id']);
-    $list=implode("\n",array_map(fn($v,$i)=>"Voucher ".($i+1)." · ważny do ".formatDate((int)$v['expires_at']),$codes,array_keys($codes)));
+    $list=implode("\n",array_map(fn($v)=>"  {$v['code']}  ·  ważny do ".formatDate((int)$v['expires_at']),$codes));
     $messages=[[(string)$order['data']['email'],(count($codes)>1 ? 'Twoje vouchery' : 'Twój voucher')." — {$q['name']}",
         voucherBuyerMail($order,$first,$list).(($q['invoice_request_text'] ?? '')!=='' ? "\n\n".$q['invoice_request_text'] : '')."\n\n$summary\n\nPytania? Po prostu odpowiedz na tę wiadomość.".($seller!=='' ? "\n\n$seller" : ''),
         $merchant!=='' ? $merchant : null]];
     if ($merchant!=='') $messages[]=[$merchant,"Nowy opłacony voucher {$order['number']} — ".formatPln((int)$order['total']),
-        "Opłacone zamówienie".($order['payment_method'] ? " ({$order['payment_method']})" : '').".\n\nE-mail kupującego: {$order['data']['email']}\nVouchery:\n$list\n\n$summary\n\n$payment",
+        "Opłacone zamówienie".($order['payment_method'] ? " ({$order['payment_method']})" : '').".\n\nE-mail kupującego: {$order['data']['email']}\nKody:\n$list\n\n$summary\n\n$payment",
         (string)$order['data']['email']];
     return $messages;
 }
 
 function voucherBuyerMail(array $order,string $first,string $list): string {
     $demo=($order['data']['snapshot']['demo'] ?? false) === true;
-    $intro=$demo ? 'To voucher demonstracyjny. Płatność była testowa. ' : 'dziękujemy! Płatność dotarła. ';
-    return "Cześć $first,\n\n$intro\nE-mail kupującego do rezerwacji: {$order['data']['email']}\n\n$list\n\n"
+    $intro=$demo ? 'To voucher demonstracyjny — kod nie uprawnia do usługi. Płatność była testowa. ' : 'dziękujemy! Płatność dotarła. ';
+    return "Cześć $first,\n\n$intro".(substr_count($list,"\n")>0 ? 'Kody voucherów' : 'Kod vouchera').":\n\n$list\n\n"
         ."Voucher do wydruku lub wysłania dalej:\n".voucherPageUrl($order)."\n\n"
-        .($demo ? "To wyłącznie przykład sposobu działania vouchera." : "Przy umawianiu terminu podaj adres e-mail kupującego.")
+        .($demo ? "To wyłącznie przykład sposobu działania vouchera." : "Przy umawianiu terminu wystarczy podać kod.")
         .((cfg()['voucher_contact'] ?? '')!=='' ? "\n".cfg()['voucher_contact'] : '');
 }
 

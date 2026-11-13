@@ -518,3 +518,31 @@ test('pending historical candle stays identified after a slow response',()=>{
   assert.equal(nodes['.thanks-photo'].src,'assets/magic-box.webp');
   assert.equal(nodes['.demo-context'].hidden,true);
 });
+
+function voucherCard(o, v = {code:'K7PM-4QXT', status:'active', expires:'31.12.2027'}) {
+  const p = page('twoj-voucher.html');
+  const parts = new Map();
+  const face = {cloneNode:() => face, querySelector:sel => {
+    if (!parts.has(sel)) parts.set(sel, {textContent:'', hidden:false});
+    return parts.get(sel);
+  }};
+  p.element('voucher-template').content = {firstElementChild:face};
+  p.run('voucher.js');
+  p.context.card(o, v);
+  return sel => parts.get(sel);
+}
+test('printed voucher shows its own code, never the buyer address',()=>{
+  const part=voucherCard({product:'Masaż',recipient:'Ani',dedication:'',demo:false,buyerEmail:'giver@example.invalid'});
+  assert.equal(part('.booking-code').textContent,'K7PM-4QXT');
+  assert.equal(part('.booking-email'),undefined);
+  assert.equal(part('.gift-for').textContent,'Dla Ani');
+});
+test('demo voucher carries the demo label on its printed face',()=>{
+  assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:true})('.gift-demo').hidden,false);
+  assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:false})('.gift-demo').hidden,true);
+});
+test('older voucher without a recipient prints no invented name',()=>{
+  const forLine=voucherCard({product:'Masaż',recipient:'',demo:false})('.gift-for');
+  assert.equal(forLine.textContent,'');
+  assert.equal(forLine.hidden,true);
+});

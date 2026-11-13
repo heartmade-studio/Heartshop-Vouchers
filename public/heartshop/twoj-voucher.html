@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="assets/shop.css?v=10">
 <link rel="stylesheet" href="assets/voucher-landing.css?v=1">
 <link rel="stylesheet" href="assets/voucher-flow.css?v=6">
-<link rel="stylesheet" href="assets/voucher-print.css?v=3">
+<link rel="stylesheet" href="assets/voucher-print.css?v=4">
 </head>
 <body class="voucher-landing voucher-flow voucher-page">
 <header class="voucher-header site-header no-print">
@@ -26,6 +26,7 @@
 <template id="voucher-template">
   <article class="gift-pair">
     <section class="gift-face gift-front" aria-label="Pierwsza strona">
+      <p class="gift-demo" hidden>DEMO — voucher przykładowy, nie uprawnia do usługi</p>
       <h1>Voucher</h1>
       <p class="gift-for"></p>
       <p class="gift-message"></p>
@@ -37,7 +38,7 @@
       </div>
       <div class="booking-details">
         <dl>
-          <div><dt>KOD:</dt> <dd class="booking-email"></dd></div>
+          <div><dt>Kod:</dt> <dd class="booking-code"></dd></div>
           <div><dt>Telefon kontaktowy:</dt> <dd>+48 600 000 000</dd></div>
           <div><dt>Adres:</dt> <dd>ul. Masażowa 12, 00-567 Warszawa</dd></div>
           <div><dt>Ważny do:</dt> <dd class="booking-expiry"></dd></div>
@@ -49,6 +50,6 @@
   </article>
 </template>
 <script src="assets/i18n.js?v=8"></script>
-<script src="assets/voucher.js?v=21"></script>
+<script src="assets/voucher.js?v=22"></script>
 </body>
 </html>

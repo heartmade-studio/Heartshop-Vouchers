@@ -70,11 +70,11 @@ function renderViews() {
   }, v.label, h("span", { class: "count" }, orders.filter(v.match).length))));
 }
 
-function voucherLine(o, v, index) {
+function voucherLine(o, v) {
   const expired = v.status === "active" && v.expires_at * 1000 < Date.now();
   const state = v.status === "used" ? `wykorzystany ${day(v.used_at)}` : expired ? `wygasł ${day(v.expires_at)}` : `ważny do ${day(v.expires_at)}`;
   return h("li", { class: "code " + (v.status === "used" ? "used" : expired ? "expired" : "active") },
-    h("span", { class: "code-value" }, `Voucher ${index + 1}`), h("span", { class: "code-state" }, state),
+    h("span", { class: "code-value" }, v.code), h("span", { class: "code-state" }, state),
     o.status === "paid" && !expired ? h("button", { type: "button", class: "btn btn-ghost btn-sm",
       onclick: () => redeem(v.code, v.status !== "used") }, v.status === "used" ? "Cofnij" : "Wykorzystany") : null);
 }
@@ -90,8 +90,8 @@ function card(o) {
        o.tracking ? h("p", { class: "muted" }, `Przesyłka: ${o.tracking}`) : null]
     : [o.recipient ? h("p", {}, `Dla: ${o.recipient}`) : null,
        o.dedication ? h("p", { class: "muted dedication" }, `„${o.dedication}”`) : null,
-       o.vouchers.length ? h("ul", { class: "codes" }, o.vouchers.map((v, i) => voucherLine(o, v, i)))
-         : o.status === "paid" ? null : h("p", { class: "muted" }, "Vouchery pojawią się po potwierdzeniu płatności.")];
+       o.vouchers.length ? h("ul", { class: "codes" }, o.vouchers.map(v => voucherLine(o, v)))
+         : o.status === "paid" ? null : h("p", { class: "muted" }, "Kody pojawią się po potwierdzeniu płatności.")];
   const invoice = o.invoice ? h("div", { class: "invoice" },
     h("p", {}, h("strong", {}, "Faktura: "), o.company, ` · NIP ${o.nip}`),
     h("p", { class: "muted" }, o.company_address),
@@ -156,7 +156,7 @@ function say(text, undo) {
 
 async function redeem(code, used) {
   const r = await api(used ? "redeem" : "unredeem", { code });
-  if (r.ok) say(used ? "Voucher oznaczony jako wykorzystany." : "Voucher jest znów aktywny.",
+  if (r.ok) say(used ? `${r.data.voucher.code}: oznaczony jako wykorzystany.` : `${r.data.voucher.code}: znów aktywny.`,
     used ? () => redeem(r.data.voucher.code, false) : null);
   else say(r.data.error || "Nie udało się.");
   await load();
@@ -164,16 +164,12 @@ async function redeem(code, used) {
 
 $("redeem-form").addEventListener("submit", async e => {
   e.preventDefault();
-  const email = $("redeem-code").value.trim();
-  if (!email || !$("redeem-code").reportValidity()) return;
-  const r = await api("voucherLookup", { email });
-  if (!r.ok) { say(r.data.error || "Nie udało się wyszukać voucherów."); return; }
-  const matches = r.data.orders;
-  const box = $("redeem-result");
-  box.replaceChildren(matches.length ? "Wybierz voucher do realizacji." : "Brak opłaconych voucherów dla tego adresu.");
-  for (const o of matches) box.append(card(o));
-  box.hidden = false;
+  const code = $("redeem-code").value.trim();
+  if (!code) return;
+  await redeem(code, true);
+  $("redeem-code").value = "";
 });
+$("redeem-code").addEventListener("input", e => { e.target.value = e.target.value.toUpperCase(); });
 ["search", "type", "sort"].forEach(id => $(id).addEventListener("input", renderList));
 
 $("login-form").addEventListener("submit", async e => {

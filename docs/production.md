@@ -69,7 +69,7 @@ Back up SQLite using its backup API/CLI `.backup`, including a tested restore; d
 Run `bash scripts/heartshop/check.sh`, then exercise your HTTPS sandbox installation:
 
 - Successful payment, cancellation, timeout, duplicate and delayed signed events, amount mismatch and changed provider ID. Only verified paid events may release goods or vouchers.
-- Voucher issuance, printable/PDF voucher and redemption/undo after buyer-email lookup. Establish the separate merchant invoicing process before live selling.
+- Voucher issuance, printable/PDF voucher with its code, and redemption/undo by code. Establish the separate merchant invoicing process before live selling.
 - Mail worker failure/retry and actual delivery; panel login/logout and unauthenticated rejection.
 - HTTP redirects, allowed hosts, direct PHP-helper denial, private paths unreachable, backup restoration.
 
@@ -90,7 +90,7 @@ production HSTS recommendation in [indexing](indexing.md).
 
 `twoj-voucher.html` is a two-sided 6×4-inch voucher (front: recipient and dedication; back: service, booking details, expiry) that buyers print or download as a PDF generated in the browser with the bundled jsPDF. Its booking details (phone, address, website) are fictional sample text: replace them in the template before selling.
 
-Booking is identified by the buyer's email address, which is printed on the voucher. Buyers therefore share that address with whoever receives the voucher; say so in your terms or checkout copy. The voucher pages and buyer email no longer show internal voucher codes; the seller finds vouchers in the panel by the buyer's email.
+Each voucher carries its own code on the printed back and in the buyer email. The recipient quotes that code when booking, and the seller redeems that exact code in the panel, so knowing the buyer's email address is not enough to claim a gift and several vouchers from one purchase stay distinguishable. The panel search also finds orders by buyer email. A sandbox (demo) voucher prints a "DEMO — not valid for a service" label on its front face, including in the PDF.
 
 ## Voucher contact line
 

@@ -37,14 +37,14 @@
   <section id="app" hidden>
     <form class="redeem" id="redeem-form" novalidate>
       <div class="field">
-        <label for="redeem-code">E-mail kupującego</label>
+        <label for="redeem-code">Realizacja vouchera</label>
         <div class="redeem-row">
-          <input id="redeem-code" autocomplete="off" type="email" autocapitalize="none" spellcheck="false" placeholder="np. ania@example.com" maxlength="254">
-          <button class="btn btn-sm" type="submit">Znajdź vouchery</button>
+          <input id="redeem-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="np. K7PM-4QXT" maxlength="12">
+          <button class="btn btn-sm" type="submit">Oznacz jako wykorzystany</button>
         </div>
       </div>
+      <p class="redeem-result" id="redeem-result" role="status" hidden></p>
     </form>
-    <div class="redeem-result" id="redeem-result" role="status" hidden></div>
 
     <div class="filters">
       <div class="views" role="group" aria-label="Które zamówienia" id="views"></div>
@@ -68,6 +68,6 @@
     <div class="orders" id="orders"></div>
   </section>
 </main>
-<script src="../assets/panel.js?v=2"></script>
+<script src="../assets/panel.js?v=1"></script>
 </body>
 </html>

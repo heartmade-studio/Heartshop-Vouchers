@@ -52,6 +52,19 @@ function findAttempt(string $key, string $fingerprint): ?array {
     return findOrder($row['external_id']);
 }
 
+function demoOnly(?string $id = null): never {
+    throw new CheckoutProblem(503,'demo_only','Ta oferta demonstracyjna jest dostępna tylko w trybie testowym.',$id);
+}
+
+/** The merchant's CURRENT gates. Checked before every provider create, including a
+ * recovered retry: an order frozen while selling was open must not create a payment
+ * after the merchant closes it. Status reads of existing payments stay available. */
+function salesOpen(array $order): bool {
+    if (paymoveHosts()['sandbox']) return true;
+    if (($order['snapshot']['demo'] ?? false) === true) return false;
+    return !(!(cfg()['production_ready'] ?? false) || (offer($order['offer'] ?? '')['demo'] ?? true) || invoiceTextNeedsApproval(cfg()));
+}
+
 function prepareCheckout(array $input, string $key, ?callable $provider = null, ?int $now = null,
     ?callable $statusCheck = null): array {
     $now ??= time();
@@ -61,9 +74,7 @@ function prepareCheckout(array $input, string $key, ?callable $provider = null, 
     if ($prior !== null) return resumeCheckout($prior,$provider,$now,$statusCheck);
     [$order,$errors]=validateOrder($input);
     if ($errors) throw new CheckoutProblem(422,'validation','Sprawdź dane zamówienia.',null,$errors);
-    if (!paymoveHosts()['sandbox'] && (!(cfg()['production_ready'] ?? false) || (offer($order['offer'])['demo'] ?? true) || invoiceTextNeedsApproval(cfg()))) {
-        throw new CheckoutProblem(503,'demo_only','Ta oferta demonstracyjna jest dostępna tylko w trybie testowym.');
-    }
+    if (!salesOpen($order)) demoOnly();
     $order['snapshot']=makeSnapshot($order,cfg());
     $order['snapshot']['payment_scope']=paymentScope();
     // Shop-wide cap on new provider calls only: junk or invalid POSTs cannot exhaust it.
@@ -120,7 +131,8 @@ function resumeCheckout(array $order, ?callable $provider, int $now, ?callable $
         $wait=$current['payment_state']==='creating' ? 30 : 3;
         $remaining=$wait-($now-(int)($current['payment_attempt_at']??$current['created_at']));
         $busy=$remaining>0;
-        if (!$reuse && !$busy) {
+        $closed=!$reuse && !$busy && !salesOpen($current['data']);
+        if (!$reuse && !$busy && !$closed) {
             $s=$db->prepare('UPDATE orders SET payment_state="creating",payment_attempt_at=:now,
             data=json_set(data,"$.snapshot.payment_scope",:scope) WHERE external_id=:id');
             $s->bindValue(':now',$now,SQLITE3_INTEGER);$s->bindValue(':scope',paymentScope());$s->bindValue(':id',$id);$s->execute();
@@ -129,6 +141,7 @@ function resumeCheckout(array $order, ?callable $provider, int $now, ?callable $
     } catch(Throwable $e) { $db->exec('ROLLBACK');throw $e; }
     if ($reuse) return checkoutResult($current,$statusCheck,true,$now);
     if ($busy) checkoutWaiting($id,$remaining);
+    if ($closed) demoOnly($id);
     return finishCheckout(findOrder($id),$provider,$now,$statusCheck,true);
 }
 

@@ -10,7 +10,7 @@ The first standalone version was extracted from the Heartmade website's shop com
 2. Checkout submits a same-origin request with an idempotency key. The server validates inputs, freezes price/terms/delivery in an order snapshot and persists the payment attempt before calling PAYMOVE.
 3. PAYMOVE returns a checkout URL. Browser callbacks are UX signals, not proof of payment.
 4. The signed webhook changes payment state and enqueues mail in one SQLite transaction. A price or provider-order conflict becomes `review`; fulfillment stays blocked.
-5. A separate worker sends queued email. Paid vouchers are issued one per unit and redeemed in the panel after looking up the buyer email; this distribution has no physical-order export.
+5. A separate worker sends queued email. Paid vouchers receive one code per unit; this distribution has no physical-order export.
 6. The merchant redeems vouchers in the panel; invoice issuance remains outside this project.
 
 SQLite WAL files and private configuration must have owner-only permissions outside the web root. The panel uses a password hash and hashed server-side session tokens. API responses are not cached; order status links are bearer links and must not be shared publicly.
