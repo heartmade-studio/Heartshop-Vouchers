@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — proposed v0.1.0
+## v0.1.0 — 2026-11-13
 
 - Standalone Heartshop Vouchers with local simulation, PAYMOVE checkout and seller panel.
 - One documented merchant indexing switch; generated canonical, OG, visible
@@ -41,9 +41,6 @@
 - Buyer text hardening: control and bidi-override characters removed; names,
   recipients and dedications reject links so shop mail cannot carry phishing text.
 - Mail envelope sender (`-f`) aligned with `MAIL_FROM`.
-
-No tag or release has been published for this proposal. Provider acceptance and
-merchant deployment are separate from offline regression results.
 
 ## 2026-11-03 — standalone extraction
 
