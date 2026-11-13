@@ -43,6 +43,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         assert request('/heartshop/',headers={'Host':'attacker.invalid'})[0]==403
         data={'qty':1,'name':'Test Buyer','email':'buyer@example.invalid','terms':True,'invoice':False}
         if KIND=='goods':data.update(phone='500600700',delivery='kurier',street='Test 1',postcode='00-001',city='Test')
+        else:data.update(recipient='Ania')
         key={'Idempotency-Key':'a'*32}
         assert request('/heartshop/api/order.php',data,dict(key,Origin='http://attacker.invalid'))[0]==403
         wrong=dict(data,offer='masaz-60' if KIND=='goods' else 'magic-box')
@@ -69,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         cookie=h['Set-Cookie'].split(';')[0]
         code,orders,_=request('/heartshop/api/panel.php?action=orders',headers={'Cookie':cookie});assert code==200 and len(orders['orders'])==1
         if KIND=='vouchers':
-            code,_,_=request('/heartshop/api/panel.php?action=redeem',{'code':status['vouchers'][0]['code']},{'Cookie':cookie});assert code==200
+            code,_,_=request('/heartshop/api/panel.php?action=redeem',{'code':orders['orders'][0]['vouchers'][0]['code']},{'Cookie':cookie});assert code==200
 
         if KIND=='vouchers':
             assert request('/heartshop/api/panel.php?action=resend',{'id':order['orderId']},{'Cookie':cookie})[0]==200
@@ -90,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
     runner=base/'production.php'
     runner.write_text('''<?php
 $_SERVER['DOCUMENT_ROOT']=$argv[1].'/public';require $argv[1].'/public/heartshop/api/lib.php';
-$input=['qty'=>1,'name'=>'Test Buyer','email'=>'buyer@example.invalid','terms'=>true,'invoice'=>false,'phone'=>'500600700','delivery'=>'kurier','street'=>'Test 1','postcode'=>'00-001','city'=>'Test'];
+$input=['qty'=>1,'name'=>'Test Buyer','email'=>'buyer@example.invalid','recipient'=>'Ania','terms'=>true,'invoice'=>false,'phone'=>'500600700','delivery'=>'kurier','street'=>'Test 1','postcode'=>'00-001','city'=>'Test'];
 $calls=0;
 try { $result=prepareCheckout($input,str_repeat($argv[2],32),function($id)use(&$calls){$calls++;return 'https://checkout.paymove.io/fixture/'.$id;});echo json_encode(['calls'=>$calls,'order'=>findOrder($result['orderId'])]); }
 catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason]);}

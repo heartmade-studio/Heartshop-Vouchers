@@ -9,7 +9,7 @@ function secrets(): array { return ['MERCHANT_EMAIL'=>'merchant@example.test']; 
 function orderNumber(int $id): string { return 'T-'.$id; }
 function formatPln(int $n): string { return (string)$n; }
 function mailsFor(string $id): array { $r=db()->query("SELECT recipient,subject,body,reply_to FROM mail_outbox WHERE order_external_id='$id' ORDER BY id"); $m=[]; while($x=$r->fetchArray(SQLITE3_ASSOC))$m[]=$x; return $m; }
-function sendMail(string $to,string $subject,string $body,?string $replyTo=null): bool { throw new RuntimeException('unexpected real mail'); }
+function sendMail(string $to,string $subject,string $body,?string $replyTo,string $orderType): bool { throw new RuntimeException('unexpected real mail'); }
 function findOrder(string $id): ?array { $s=db()->prepare('SELECT * FROM orders WHERE external_id=:id'); $s->bindValue(':id',$id); $r=$s->execute()->fetchArray(SQLITE3_ASSOC); if(!$r)return null; $r['data']=json_decode($r['data'],true); $r['number']=orderNumber((int)$r['id']); return $r; }
 function orderSummary(array $order): string { return 'SUMMARY '.$order['number'].' '.json_encode($order['data']); }
 require __DIR__.'/../../public/heartshop/api/reliability.php';
@@ -23,6 +23,7 @@ seed();
 $r=applyPaymentEvent(event('x','COMPLETED',1200)); ok(($r['status']??'')==='paid','paid transition'); ok((int)$db->querySingle('SELECT COUNT(*) FROM mail_outbox')===2,'paid queues both recipients');
 applyPaymentEvent(event('x','COMPLETED',1200)); ok((int)$db->querySingle('SELECT COUNT(*) FROM mail_outbox')===2,'duplicate paid no notices');
 seed('bad'); $r=applyPaymentEvent(event('bad','COMPLETED',999)); ok(($r['status']??'')==='review','amount mismatch review'); ok((int)$db->querySingle("SELECT COUNT(*) FROM mail_outbox WHERE order_external_id='bad'")==1,'review merchant-only');
+ok(str_contains(mailsFor('bad')[0]['body'],'ID płatności Paymove: pm-1'),'amount mismatch notice retains incoming signed payment id');
 seed('paid','paid'); applyPaymentEvent(event('paid','CANCELED',1200)); ok($db->querySingle("SELECT status FROM orders WHERE external_id='paid'")==='paid','paid cannot regress');
 $db->exec('DELETE FROM mail_outbox');
 seed('retry'); applyPaymentEvent(event('retry','COMPLETED',1200)); $sent=[]; $sender=function($to,$sub,$body)use(&$sent){$sent[]=$to;return count($sent)>1;};
@@ -49,8 +50,17 @@ ok(findOrder('late')['status']==='paid','late signed completion after cancellati
 $before=findOrder('late');$duplicate=event('late','CANCELED',0);$duplicate['orderId']='different';applyPaymentEvent($duplicate);
 ok(findOrder('late')===$before,'terminal metadata immutable');
 seed('identity');applyPaymentEvent(event('identity','CANCELED',1200));
+ok(findOrder('identity')['paymove_order_id']===null,'failed transaction does not bind the paid transaction');
 $other=event('identity','COMPLETED',1200);$other['orderId']='pm-other';applyPaymentEvent($other);
-ok(findOrder('identity')['status']==='review','different bound payment held for review');
+ok(findOrder('identity')['status']==='paid' && findOrder('identity')['paymove_order_id']==='pm-other','same purchase accepts a new successful transaction after failure');
+ok((int)$db->querySingle("SELECT COUNT(*) FROM payment_transactions WHERE order_external_id='identity'")===2,'signed failed and successful transaction history retained');
+seed('bound-identity');$db->exec("UPDATE orders SET paymove_order_id='already-bound' WHERE external_id='bound-identity'");
+$bound=event('bound-identity','COMPLETED',1200);$bound['orderId']='unexpected';applyPaymentEvent($bound);
+ok(findOrder('bound-identity')['status']==='review','unexpected change of a nonfailed binding still held');
+ok(str_contains(mailsFor('bound-identity')[0]['body'],'ID płatności Paymove: unexpected') && str_contains(mailsFor('bound-identity')[0]['body'],'already-bound'),'review identifies both incoming and previously bound transactions');
+seed('legacy-failed','canceled');$db->exec("UPDATE orders SET paymove_order_id='old-failed-id' WHERE external_id='legacy-failed'");
+applyPaymentEvent(event('legacy-failed','COMPLETED',1200));
+ok(findOrder('legacy-failed')['status']==='paid','legacy canceled binding can become successful');
 ok(applyPaymentEvent(event('unknown','COMPLETED',1200))['status']==='ignored','unknown signed event ignored');
 foreach ([true,1200.5,-1,'1e3','9999999999999','9223372036854775808',[],null] as $invalid) {
     $bad=event('x','COMPLETED',1200);$bad['price']=$invalid;
@@ -72,4 +82,17 @@ seed('no-eta');applyPaymentEvent(event('no-eta','COMPLETED',1200));
 ok(!str_contains(mailsFor('no-eta')[0]['body'],'Wysyłamy'),'no snapshot ETA means no dispatch promise');
 seed('mismatch');applyPaymentEvent(event('mismatch','COMPLETED',999));$review=mailsFor('mismatch');
 ok(count($review)===1 && str_contains($review[0]['body'],'999 gr') && str_contains($review[0]['body'],'1200 gr') && str_contains($review[0]['body'],'Nie wysyłaj'),'review mail shows reported and expected amounts');
+
+// Previously queued rows, including historical goods orders, use their order's sender on delivery.
+$db->exec('DELETE FROM mail_outbox');
+seed('sender-goods');
+applyPaymentEvent(event('sender-goods','COMPLETED',1200));
+seed('sender-voucher','pending',1200,['snapshot'=>['type'=>'voucher']]);
+applyPaymentEvent(event('sender-voucher','COMPLETED',999)); // Merchant review notice
+$routes = [];
+processMailQueue(function ($to, $subject, $body, $reply, $type) use (&$routes) {
+    $routes[] = [$to, $type];
+    return true;
+});
+ok($routes === [['buyer@example.test','shipping'], ['merchant@example.test','shipping'], ['merchant@example.test','voucher']], 'route notices by order type');
 echo "outbox: $checks assertions passed\n";

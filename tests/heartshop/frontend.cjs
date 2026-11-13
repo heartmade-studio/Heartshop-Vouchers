@@ -26,7 +26,7 @@ function page(file, store = storage(), lang = 'pl', dataset = {}) {
   }
   const redirects=[];
   const context = {
-    URLSearchParams, Date, JSON, crypto:webcrypto, Uint8Array, TextEncoder, CSS:{escape:x=>x},
+    AbortController, URL, URLSearchParams, Date, JSON, crypto:webcrypto, Uint8Array, TextEncoder, CSS:{escape:x=>x},
     location:{search:'',pathname:'/heartshop/'+file,assign:u=>redirects.push(u)},
     document:{documentElement:{lang,dataset,style:{setProperty(){}}},getElementById:element,querySelectorAll:()=>[],createElement:()=>element('created'),head:{append(){}}},
     sessionStorage:store, fetch:()=>new Promise(()=>{}), setTimeout(){},
@@ -79,8 +79,8 @@ test('broken or unavailable attempt storage cannot silently create another payme
   const broken=page('zamowienie.html',{getItem(){throw Error('denied');},setItem(){throw Error('denied');},removeItem(){}});
   broken.run('attempt.js');await assert.rejects(()=>broken.context.HeartshopAttempt.begin({qty:1}));
 });
-async function checkout(store, file='zamowienie.html', lang='pl') {
-  const p=page(file,store,lang);p.run('attempt.js');p.run('checkout.js');
+async function checkout(store, file='zamowienie.html', lang='pl', dataset={}) {
+  const p=page(file,store,lang,dataset);p.run('attempt.js');p.run('checkout.js');
   vm.runInContext(`cfg={product:{price:4900,max_qty:10},delivery:{kurier:{price:1699}},freeShippingFrom:null,geowidgetToken:''}`,p.context);
   for (const [k,v] of Object.entries({email:'test@example.invalid',phone:'500600700',name:'TEST Person',street:'Test 1',postcode:'00-001',city:'Test'})) p.element(k).value=v;
   p.element('terms').checked=true;
@@ -101,6 +101,43 @@ async function closedModal(status,event='onCancel') {
   await callbacks[event]();
   return {p,calls};
 }
+test('both PAY pricing URL formats open compact Checkout with the same provider token and no forced method',async()=>{
+  for (const suffix of ['/product/pricing-id','/product?externalId=pricing-id']) {
+    const p=await checkout();
+    let opened;
+    p.context.Paymove={openCheckout:(url,options)=>{opened={url,method:options.triggerPayment};}};
+    vm.runInContext('sdk=Promise.resolve(Paymove)',p.context);
+    p.context.fetch=async()=>({ok:true,status:200,json:async()=>({orderId:'hs_'+'a'.repeat(24),redirectUrl:'https://pay.sandbox.paymove.io'+suffix})});
+    await p.element('order').handlers.submit({preventDefault(){}});
+    assert.deepEqual(opened,{url:'https://checkout.sandbox.paymove.io/product?externalId=pricing-id',method:undefined});
+  }
+});
+test('PAY retains the complete hosted URL for an unsupported link',async()=>{
+  const p=await checkout();
+  const redirectUrl='https://pay.sandbox.paymove.io/product/price?extra=1';
+  p.context.fetch=async()=>({ok:true,status:200,json:async()=>({orderId:'hs_'+'a'.repeat(24),redirectUrl})});
+  await p.element('order').handlers.submit({preventDefault(){}});
+  assert.deepEqual(p.redirects,[redirectUrl]);
+});
+test('changed voucher details offer the previous order status without creating another payment',async()=>{
+  const p=await checkout();
+  vm.runInContext("cfg.product.type='voucher'",p.context);
+  p.element('recipient').value='Ani';
+  vm.runInContext('sdk=Promise.reject(new Error());sdk.catch(()=>{})',p.context);
+  const id='hs_'+'b'.repeat(24);
+  let posts=0;
+  p.context.fetch=async(u,options)=>{
+    if(options.method==='POST'){posts++;return {ok:true,status:200,json:async()=>({orderId:id,redirectUrl:'https://pay.sandbox.paymove.io/product/price'})};}
+    return {ok:true,json:async()=>({status:'pending'})};
+  };
+  const submit=()=>p.element('order').handlers.submit({preventDefault(){}});
+  await submit();
+  p.element('recipient').value='New recipient';
+  await submit();
+  assert.equal(posts,1);
+  assert.equal(p.element('attempt-status').hidden,false);
+  assert.equal(p.element('attempt-status').href,'dziekujemy.html?o='+id);
+});
 test('modal closed without a success signal still reaches thanks once the webhook paid',async()=>{
   for (const event of ['onCancel','onError']) {
     const {p,calls}=await closedModal('paid',event);
@@ -113,6 +150,74 @@ test('modal closed without payment keeps the buyer on the form after the bounded
   assert.equal(calls,4);
   assert.deepEqual(p.redirects,[]);
   assert.equal(p.element('pay').disabled,false);
+});
+test('closing PENDING Paymove and resubmitting preserves one order and one successful payment', {timeout:15000}, async t=>{
+  const {execFileSync}=require('node:child_process');
+  const privateDir=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'heartshop-pending-regression-'));
+  t.after(()=>fs.rmSync(privateDir,{recursive:true,force:true}));
+  fs.chmodSync(privateDir,0o700);
+  const envFile=path.join(privateDir,'.env');
+  fs.writeFileSync(envFile,'PAYMOVE_API_KEY=synthetic-only\nPAYMOVE_PRODUCT_ID=fixture\nPAYMOVE_WEBHOOK_SECRET=synthetic-signing-only\nMAIL_FROM=shop@example.invalid\nMERCHANT_EMAIL=merchant@example.invalid\nSHOP_ORIGIN=https://shop.example.com\n',{mode:0o600});
+  // Only provider I/O is substituted. Browser scripts and PHP checkout/payment
+  // functions run unchanged, sharing an isolated persistent SQLite database.
+  const bridge=action=>JSON.parse(execFileSync('php',[
+    '-d','disable_functions=curl_exec,mail',
+    path.join(root,'tests/heartshop/fixtures/pending-checkout.php'),root,
+  ],{input:JSON.stringify(action),encoding:'utf8',timeout:5000,
+    env:{...process.env,HEARTSHOP_ENV_FILE:envFile}}));
+  const p=await checkout(undefined,'zamowienie.html','pl',{offer:'magic-box'});
+  p.context.setTimeout=fn=>fn(); // Exercise the bounded check without wall-clock sleeps.
+  let callbacks,opens=0,statusReads=0;
+  const requests=[],responses=[];
+  p.context.Paymove={openCheckout:(url,options)=>{opens++;callbacks=options;}};
+  vm.runInContext('sdk=Promise.resolve(Paymove)',p.context);
+  p.context.fetch=async(url,options)=>{
+    let result;
+    if(String(url).startsWith('api/status.php')) {
+      statusReads++;
+      result=bridge({action:'status',id:new URL(url,'https://synthetic.invalid/').searchParams.get('o')});
+    } else {
+      assert.equal(url,'api/order.php');assert.equal(options.method,'POST');
+      requests.push({key:options.headers['Idempotency-Key'],input:JSON.parse(options.body)});
+      result=bridge({action:'checkout',...requests.at(-1)});
+      responses.push(result.body);
+    }
+    assert.equal(result.http,200);
+    return {ok:true,status:result.http,json:async()=>result.body};
+  };
+  const submit=()=>p.element('order').handlers.submit({preventDefault(){}});
+  await submit();
+  const id=responses[0].orderId,first=bridge({action:'stats',id}).body;
+  assert.equal(requests[0].input.offer,'magic-box');
+  assert.equal(opens,1);assert.equal(first.orders,1);assert.equal(first.provider_creates,1);
+  assert.equal(first.total,6599);assert.equal(first.paid,0);
+  assert.equal(first.payment_url,responses[0].redirectUrl);
+
+  // The fixture holds the provider at PENDING until the explicit signed completion.
+  await callbacks.onCancel();
+  assert.equal(statusReads,4);assert.equal(p.element('pay').disabled,false);
+  assert.deepEqual(p.redirects,[]);
+  await submit();
+  const pending=bridge({action:'stats',id}).body;
+  assert.deepEqual(requests[1],requests[0],'retry preserves the key and complete payload');
+  assert.deepEqual(responses[1],{orderId:id,status:'processing'});
+  assert.equal(attemptOf(p).orderId,id);assert.equal(opens,1,'no second payable modal');
+  assert.deepEqual(p.redirects,['dziekujemy.html?o='+id]);
+  assert.equal(pending.orders,1);assert.equal(pending.provider_creates,1);
+  assert.equal(pending.status_probes,1);assert.equal(pending.observation,'PENDING');
+  assert.equal(pending.payment_url,first.payment_url);assert.equal(pending.paid,0);
+  assert.equal(pending.successful_transactions,0);assert.equal(pending.outbox,0);
+
+  const completed=bridge({action:'complete',id}).body;
+  assert.deepEqual(completed.first,{status:'paid',changed:true});
+  assert.deepEqual(completed.duplicate,{status:'paid',changed:false});
+  const paidRetry=bridge({action:'checkout',...requests[0]}).body;
+  assert.deepEqual(paidRetry,{orderId:id,status:'paid'});
+  const final=bridge({action:'stats',id}).body;
+  assert.equal(final.orders,1);assert.equal(final.paid,1);
+  assert.equal(final.successful_transactions,1);assert.equal(final.provider_creates,1);
+  assert.equal(final.status_probes,1,'paid retry never contacts the provider');
+  assert.equal(final.payment_url,first.payment_url);assert.equal(final.outbox,2);
 });
 test('actual submit retries a network failure with the identical header and payload',async()=>{
   const p=await checkout(), requests=[];
@@ -147,8 +252,8 @@ async function bound(store,orderId) {
   p.context.HeartshopAttempt.remember(key,orderId);
   return p;
 }
-test('confirmed paid or canceled status ends only that order\'s own attempt',async()=>{
-  for (const state of ['paid','canceled']) {
+test('confirmed payment ends only that order\'s own attempt',async()=>{
+  for (const state of ['paid']) {
     const p=await bound(storage(),orderA);
     const own=page('dziekujemy.html',p.store);own.context.location.search='?o='+orderB;
     own.run('attempt.js');own.run('thanks.js');own.context.show(state,order);
@@ -158,11 +263,13 @@ test('confirmed paid or canceled status ends only that order\'s own attempt',asy
     assert.equal(p.store.getItem('heartshop-attempt:/heartshop/'),null,state);
   }
 });
-test('review and pending keep the attempt bound',async()=>{
+test('cancellation and review keep the attempt bound',async()=>{
+  for (const state of ['review','canceled']) {
   const p=await bound(storage(),orderA);
   const thanks=page('dziekujemy.html',p.store);thanks.context.location.search='?o='+orderA;
-  thanks.run('attempt.js');thanks.run('thanks.js');thanks.context.show('review',order);
+  thanks.run('attempt.js');thanks.run('thanks.js');thanks.context.show(state,order);
   assert.equal(attemptOf(p).orderId,orderA);
+  }
 });
 test('a second purchase after a paid order is a new attempt, not the old order',async()=>{
   const keys=[];
@@ -177,24 +284,29 @@ test('a second purchase after a paid order is a new attempt, not the old order',
   assert.equal(keys.length,2);assert.notEqual(keys[0],keys[1]);
   assert.deepEqual(again.redirects,['dziekujemy.html?o='+orderB]);
 });
-test('retry after the operator canceled the payment opens exactly one fresh attempt',async()=>{
+test('closing and resuming a canceled payment keeps the same attempt key',async()=>{
   const p=await checkout(),keys=[];
   p.context.fetch=async(u,o)=>{keys.push(o.headers['Idempotency-Key']);
-    return keys.length===1
-      ? {ok:false,status:409,json:async()=>({code:'payment_closed',orderId:orderA,error:'closed'})}
-      : {ok:true,status:200,json:async()=>({orderId:orderB,status:'paid'})};};
+    return {ok:true,status:200,json:async()=>({orderId:orderA,status:'processing'})};};
   await p.element('order').handlers.submit({preventDefault(){}});
-  assert.equal(keys.length,2);assert.notEqual(keys[0],keys[1]);
-  assert.deepEqual(p.redirects,['dziekujemy.html?o='+orderB]);
+  const thanks=page('dziekujemy.html',p.store);thanks.context.location.search='?o='+orderA;
+  thanks.run('attempt.js');thanks.run('thanks.js');thanks.context.show('canceled',order);
+  const again=await checkout(p.store);again.context.fetch=p.context.fetch;
+  await again.element('order').handlers.submit({preventDefault(){}});
+  assert.equal(keys.length,2);assert.equal(keys[0],keys[1]);
+  assert.deepEqual(again.redirects,['dziekujemy.html?o='+orderA]);
 });
-test('a repeated payment_closed never loops',async()=>{
+test('an older server payment_closed response never rotates the key',async()=>{
   const p=await checkout();let calls=0;
   p.context.fetch=async()=>{calls++;return {ok:false,status:409,json:async()=>({code:'payment_closed',orderId:orderA,error:'closed'})};};
   await p.element('order').handlers.submit({preventDefault(){}});
-  assert.equal(calls,2);assert.deepEqual(p.redirects,[]);
+  const key=attemptOf(p).key;
+  vm.runInContext('setBusy(false)',p.context);
+  await p.element('order').handlers.submit({preventDefault(){}});
+  assert.equal(calls,2);assert.equal(attemptOf(p).key,key);assert.deepEqual(p.redirects,[]);
 });
-test('changed data is allowed only after the previous order is confirmed canceled',async()=>{
-  for (const [status,allowed] of [['canceled',true],['pending',false],['review',false]]) {
+test('changed data never silently creates a new attempt, including after cancellation',async()=>{
+  for (const status of ['canceled','pending','review']) {
     const p=await checkout(),orders=[],statusChecks=[];
     p.context.fetch=async(u,o)=>{
       if (u.startsWith('api/status.php')) { statusChecks.push(u);return {ok:true,json:async()=>({status})}; }
@@ -204,9 +316,72 @@ test('changed data is allowed only after the previous order is confirmed cancele
     const submit=()=>p.element('order').handlers.submit({preventDefault(){}});
     await submit();
     p.element('email').value='changed@example.invalid';await submit();
-    assert.deepEqual(statusChecks,['api/status.php?o='+orderA],status);
-    assert.equal(orders.length,allowed?2:1,status);
-    if (allowed) assert.notEqual(orders[0],orders[1]);
+    assert.deepEqual(statusChecks,[],status);
+    assert.equal(orders.length,1,status);
+    assert.equal(attemptOf(p).key,orders[0]);
+    assert.equal(p.element('attempt-status').hidden,false);
+  }
+});
+test('an uncertain attempt is retried with its same key and order and reaches the payment',async()=>{
+  const p=await checkout(),keys=[];let opened;
+  p.context.Paymove={openCheckout:(url)=>{opened=url;}};
+  vm.runInContext('sdk=Promise.resolve(Paymove)',p.context);
+  p.context.fetch=async(u,o)=>{keys.push(o.headers['Idempotency-Key']);
+    return keys.length===1
+      ? {ok:false,status:409,json:async()=>({code:'payment_wait',orderId:orderA,error:'Odczekaj chwilę'})}
+      : {ok:true,status:200,json:async()=>({orderId:orderA,redirectUrl:'https://checkout.sandbox.paymove.io/fixture?externalId=Ab12345678'})};};
+  await p.element('order').handlers.submit({preventDefault(){}});
+  assert.equal(p.element('pay').disabled,false);assert.equal(attemptOf(p).orderId,orderA);
+  await p.element('order').handlers.submit({preventDefault(){}});
+  assert.equal(keys[0],keys[1]);assert.match(opened,/Ab12345678$/);
+});
+test('a resumed canceled order keeps polling until the late paid webhook arrives',async()=>{
+  const p=await bound(storage(),orderA),scheduled=[];
+  const thanks=page('dziekujemy.html',p.store);thanks.context.location.search='?o='+orderA;
+  thanks.context.setTimeout=(callback,delay)=>scheduled.push([callback,delay]);
+  thanks.context.fetch=async()=>({ok:true,json:async()=>({...order,status:'canceled'})});
+  thanks.run('attempt.js');thanks.run('thanks.js');
+  await new Promise(setImmediate);
+  assert.equal(scheduled.length,1);assert.equal(scheduled[0][1],2000);
+  assert.equal(attemptOf(p).orderId,orderA);
+  thanks.context.fetch=async()=>({ok:true,json:async()=>({...order,status:'paid'})});
+  await scheduled[0][0]();
+  assert.match(thanks.element('text').textContent,/jest opłacone/);
+  assert.equal(p.store.getItem('heartshop-attempt:/heartshop/'),null);
+});
+test('canceled polling uses the same backoff after 45 seconds',async()=>{
+  const p=page('dziekujemy.html'),scheduled=[];let clock=0;
+  p.context.Date=class extends Date {static now(){return clock;}};
+  p.context.setTimeout=(fn,delay)=>scheduled.push([fn,delay]);
+  p.context.fetch=async()=>({ok:true,json:async()=>({...order,status:'canceled'})});
+  p.run('attempt.js');p.run('thanks.js');await new Promise(setImmediate);
+  assert.equal(scheduled[0][1],2000);
+  clock=46000;await scheduled[0][0]();
+  assert.equal(scheduled[1][1],10000);
+  assert.match(p.element('text').textContent,/Nie rozpoczynaj nowej płatności/);
+});
+test('missing failure webhook offers a same-attempt status recheck without claiming cancellation',async()=>{
+  const boundPage=await bound(storage(),orderA),p=page('dziekujemy.html',boundPage.store),scheduled=[];
+  p.context.location.search='?o='+orderA;
+  p.context.setTimeout=(fn,delay)=>scheduled.push([fn,delay]);
+  p.context.fetch=async()=>({ok:true,json:async()=>({...order,status:'pending',resumeAvailable:true})});
+  p.run('attempt.js');p.run('thanks.js');await new Promise(setImmediate);
+  assert.match(p.element('text').textContent,/wznowić tę samą płatność/);
+  assert.doesNotMatch(p.element('text').textContent,/anulowanie/);
+  assert.equal(p.element('action').href,'zamowienie.html');
+  assert.equal(attemptOf(boundPage).orderId,orderA);
+  assert.equal(scheduled[0][1],10000);
+});
+test('detached status pages never offer a new checkout as resuming an existing purchase',async()=>{
+  for (const state of ['resume','canceled']) {
+    for (const other of [false,true]) {
+      const store=storage();if(other) await bound(store,orderB);
+      const p=page('dziekujemy.html',store);p.context.location.search='?o='+orderA;
+      p.run('attempt.js');p.run('thanks.js');p.context.show(state,order);
+      assert.equal(p.element('action').hidden,true);
+      assert.match(p.element('text').textContent,/karty, w której rozpoczęto zakup/);
+      assert.match(p.element('text').textContent,/Nie rozpoczynaj nowej płatności/);
+    }
   }
 });
 test('English checkout uses the shared API, English pages and the shared attempt',async()=>{
@@ -257,12 +432,42 @@ test('shipped-product checkout sends exactly the pre-voucher payload, key order 
   assert.deepEqual(Object.keys(bodies[0]),['qty','email','phone','name','delivery','invoice','terms','street','postcode','city']);
 });
 async function voucherCheckout(store=storage()) {
-  const p=page('voucher/zamowienie.html',store,'pl',{root:'../',offer:'masaz-60'});p.run('attempt.js');p.run('checkout.js');
+  const p=page('voucher/zamowienie.html',store,'pl',{root:'../',offer:'masaz-60'});
+  const removed=new Set(['invoice','invoice-toggle','reveal-invoice','company','nip','company_address']);
+  p.context.document.getElementById=id=>removed.has(id)?null:p.element(id);
+  p.run('attempt.js');p.run('checkout.js');
   vm.runInContext(`cfg={product:{id:'masaz-60',type:'voucher',price:25000,max_qty:5},delivery:{kurier:{price:1699}},freeShippingFrom:15000,geowidgetToken:''}`,p.context);
   for (const [k,v] of Object.entries({email:'gift@example.invalid',name:'TEST Giver',recipient:'Ania',dedication:'Na spokój'})) p.element(k).value=v;
   p.element('terms').checked=true;
   return p;
 }
+test('voucher checkout ignores invoice data in an older draft without invoice controls',async()=>{
+  const store=storage();
+  store.setItem('heartshop-draft:/heartshop/voucher/',JSON.stringify({invoice:true,company:'Old company',nip:'1234567890'}));
+  const p=await voucherCheckout(store);
+  vm.runInContext('loadDraft();updateReveals();saveDraft()',p.context);
+  assert.equal(p.context.collect().invoice,false);
+  assert.equal(JSON.parse(store.getItem('heartshop-draft:/heartshop/voucher/')).invoice,false);
+  assert.equal(p.context.collect().company,undefined);
+});
+test('voucher requires a recipient and previews the printed wording while typing',async()=>{
+  const p=await voucherCheckout();
+  const recipient=p.element('recipient'), dedication=p.element('dedication');
+  recipient.value='   ';
+  recipient.handlers.input();
+  assert.ok(p.context.check(p.context.collect()).recipient);
+  assert.equal(p.element('preview-for').textContent,'Dla …');
+  recipient.value=' Olgi ';
+  recipient.handlers.input();
+  assert.equal(p.element('preview-for').textContent,'Dla Olgi');
+  dedication.value='Dla ukochanej\nOlgi';
+  dedication.handlers.input();
+  assert.equal(p.element('preview-message').textContent,'Dla ukochanej Olgi');
+  dedication.value='';
+  dedication.handlers.input();
+  assert.equal(p.element('preview-message').textContent,'Na chwilę tylko dla Ciebie.');
+});
+
 test('voucher checkout needs no phone or address and names its offer',async()=>{
   const store=storage(),p=await voucherCheckout(store),calls=[];
   p.context.fetch=async(u,o)=>{calls.push([u,JSON.parse(o.body)]);return {ok:true,status:200,json:async()=>({orderId:orderA,status:'paid'})};};

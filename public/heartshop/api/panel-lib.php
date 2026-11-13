@@ -66,7 +66,7 @@ function panelCookie(string $value, int $expires): void {
 }
 
 /** Every order, newest first, with what the seller needs to act on it. */
-function panelOrders(int $limit = 2000): array {
+function panelOrders(int $limit = 2000, ?string $voucherEmail = null): array {
     $db = db();
     $codes = [];
     $res = $db->query('SELECT * FROM vouchers ORDER BY created_at, code');
@@ -74,7 +74,10 @@ function panelOrders(int $limit = 2000): array {
         $codes[$v['order_external_id']][] = ['code' => $v['code'], 'status' => $v['status'],
             'expires_at' => (int)$v['expires_at'], 'used_at' => $v['used_at'] === null ? null : (int)$v['used_at']];
     }
-    $s = $db->prepare('SELECT * FROM orders ORDER BY id DESC LIMIT :limit');
+    $filter = $voucherEmail === null ? '' : " WHERE status='paid' AND external_id IN (SELECT order_external_id FROM vouchers)
+        AND json_extract(data, '$.email') = :email COLLATE NOCASE";
+    $s = $db->prepare('SELECT * FROM orders' . $filter . ' ORDER BY id DESC LIMIT :limit');
+    if ($voucherEmail !== null) $s->bindValue(':email', $voucherEmail, SQLITE3_TEXT);
     $s->bindValue(':limit', max(1, min(10000, $limit)), SQLITE3_INTEGER);
     $res = $s->execute();
     $out = [];
@@ -105,7 +108,7 @@ function panelOrders(int $limit = 2000): array {
 /** The seller's own bookkeeping on an order: a note and two "done" ticks. Payment state is never touched. */
 function panelUpdate(mixed $id, array $in, ?int $now = null): void {
     $now ??= time();
-    if (!is_string($id) || !preg_match('/^hs_[a-f0-9]{24}$/D', $id) || !findOrder($id)) {
+    if (!validOrderId($id) || !findOrder($id)) {
         throw new PanelProblem(404, 'unknown_order', 'Nie ma takiego zamówienia.');
     }
     $sets = [];
@@ -128,16 +131,11 @@ function panelUpdate(mixed $id, array $in, ?int $now = null): void {
 
 /** Queues the buyer's confirmation again (same content, today's link). Paid orders only, a few per hour. */
 function panelResend(mixed $id, ?int $now = null): void {
-    $order = is_string($id) && preg_match('/^hs_[a-f0-9]{24}$/D', $id) ? findOrder($id) : null;
+    $order = validOrderId($id) ? findOrder($id) : null;
     if (!$order) throw new PanelProblem(404, 'unknown_order', 'Nie ma takiego zamówienia.');
     if ($order['status'] !== 'paid') throw new PanelProblem(409, 'not_paid', 'Potwierdzenie wysyłamy tylko dla opłaconych zamówień.');
     if (!consumeLimits(['resend:' . $id => 3], $now)) throw new PanelProblem(429, 'rate_limited', 'To potwierdzenie wysłano już kilka razy. Spróbuj za chwilę.');
-    [$to, $subject, $body, $reply] = paymentNotices($order, 'paid', [])[0];
-    $s = db()->prepare('INSERT INTO mail_outbox(order_external_id,recipient,subject,body,reply_to,created_at) VALUES(:id,:to,:subject,:body,:reply,:now)');
-    $s->bindValue(':id', $id); $s->bindValue(':to', $to); $s->bindValue(':subject', $subject); $s->bindValue(':body', $body);
-    $s->bindValue(':reply', $reply, $reply === null ? SQLITE3_NULL : SQLITE3_TEXT);
-    $s->bindValue(':now', $now ?? time(), SQLITE3_INTEGER);
-    $s->execute();
+    queueMail(db(), $id, paymentNotices($order, 'paid', [])[0], $now);
 }
 
 /** Semicolon CSV with a BOM, so Polish Excel opens it with the right columns and letters. */

@@ -88,7 +88,7 @@ function buildDelivery() {
 }
 
 function updateReveals() {
-  $("reveal-invoice").hidden = !$("invoice").checked;
+  if ($("reveal-invoice")) $("reveal-invoice").hidden = !$("invoice")?.checked;
   if (!shipped()) return;
   const d = selectedDelivery();
   $("reveal-paczkomat").hidden = d !== "paczkomat";
@@ -168,14 +168,14 @@ function collect() {
     // Key order is part of the attempt fingerprint (JSON.stringify): keep it as it always was.
     const d = selectedDelivery();
     Object.assign(data, { phone: v("phone"), name: v("name"), delivery: d,
-      invoice: $("invoice").checked, terms: $("terms").checked });
+      invoice: Boolean($("invoice")?.checked), terms: $("terms").checked });
     if (d === "paczkomat") Object.assign(data, cfg.geowidgetToken
       ? { point: point.code, point_label: point.label }
       : { point: v("point-input").toUpperCase(), point_label: "" });
     Object.assign(data, { street: v("street"), postcode: v("postcode"), city: v("city") });
   } else {
     Object.assign(data, { name: v("name"), recipient: v("recipient"), dedication: v("dedication"),
-      invoice: $("invoice").checked, terms: $("terms").checked });
+      invoice: Boolean($("invoice")?.checked), terms: $("terms").checked });
   }
   if (data.invoice) Object.assign(data, { company: v("company"), nip: v("nip").replace(/\D/g, ""), company_address: v("company_address") });
   return data;
@@ -192,6 +192,8 @@ function check(data) {
     if (data.street.length < 3 || !/\d/.test(data.street)) e.street = t("err.street");
     if (!/^\d{2}-\d{3}$/.test(data.postcode)) e.postcode = t("err.postcode");
     if (data.city.length < 2) e.city = t("err.city");
+  } else if (!data.recipient) {
+    e.recipient = t("err.recipient");
   }
   if (data.invoice) {
     if (data.company.length < 2) e.company = t("err.company");
@@ -236,7 +238,7 @@ $("point-input")?.addEventListener("input", e => { e.target.value = e.target.val
 const DRAFT_FIELDS = ["email", "phone", "name", "street", "postcode", "city", "recipient", "dedication",
   "company", "nip", "company_address", "point-input"].filter(id => $(id));
 function saveDraft() {
-  const d = { qty, delivery: selectedDelivery(), invoice: $("invoice").checked, point };
+  const d = { qty, delivery: selectedDelivery(), invoice: Boolean($("invoice")?.checked), point };
   DRAFT_FIELDS.forEach(id => d[id] = $(id).value);
   store.write(d);
 }
@@ -246,7 +248,7 @@ function loadDraft() {
   if (Number.isInteger(d.qty)) qty = Math.min(Math.max(d.qty, 1), cfg.product.max_qty);
   const radio = d.delivery && form.querySelector(`input[name="delivery"][value="${CSS.escape(d.delivery)}"]`);
   if (radio) radio.checked = true;
-  $("invoice").checked = Boolean(d.invoice);
+  if ($("invoice")) $("invoice").checked = Boolean(d.invoice);
   if (d.point?.code) point = d.point;
 }
 
@@ -264,6 +266,14 @@ function loadSdk() {
   return sdk;
 }
 
+// Sandbox pricing can return a PAY link for the same priced item. Checkout
+// needs the provider's pricing token (not our order ID) in its externalId query.
+function checkoutUrl(redirectUrl) {
+  const match = /^https:\/\/pay\.sandbox\.paymove\.io\/([\w-]+)(?:\/|\?externalId=)([\w-]+)$/.exec(redirectUrl);
+  if (!match) return redirectUrl;
+  return `https://checkout.sandbox.paymove.io/${match[1]}?externalId=${match[2]}`;
+}
+
 function setBusy(on) {
   submitting = on;
   payBtn.disabled = on;
@@ -271,6 +281,7 @@ function setBusy(on) {
 }
 
 function showAlert(text, info = false) {
+  $("attempt-status").hidden = true;
   alertBox.textContent = text;
   alertBox.classList.toggle("info", info);
   alertBox.hidden = !text;
@@ -299,12 +310,7 @@ form.addEventListener("submit", async e => {
   try {
     const payload = collect();
     const send = async () => {
-      let attemptKey;
-      try { attemptKey = await HeartshopAttempt.begin(payload); }
-      catch (err) {
-        if (!(await HeartshopAttempt.releaseIfCanceled())) throw err;
-        attemptKey = await HeartshopAttempt.begin(payload);
-      }
+      const attemptKey = await HeartshopAttempt.begin(payload);
       const res = await fetch(`${I.api}order.php`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": attemptKey },
@@ -314,25 +320,26 @@ form.addEventListener("submit", async e => {
       HeartshopAttempt.remember(attemptKey, body.orderId);
       return [res, body];
     };
-    let [res, body] = await send();
-    if (res.status === 409 && body.code === "payment_closed") {
-      // The operator canceled the previous payment: one fresh attempt, never a loop.
-      HeartshopAttempt.clear();
-      [res, body] = await send();
-    }
+    const [res, body] = await send();
     if (res.status === 422 && body.errors) {
       HeartshopAttempt.clear(); // Validation rejected before an order/payment was created.
       showErrors(I.fieldErrors(body.errors)); focusFirstError(); setBusy(false); return;
     }
     const thanks = `${I.page.thanks}?o=${encodeURIComponent(body.orderId || "")}`;
-    if (res.ok && body.orderId && ["paid", "review"].includes(body.status)) {
+    if (res.ok && body.orderId && ["paid", "review", "processing"].includes(body.status)) {
       location.assign(thanks); return;
     }
     if (!res.ok || !body.redirectUrl) throw new Error((body.error && I.serverError(body)) || t("alert.uncertain"));
+    const url = checkoutUrl(body.redirectUrl);
+    if (url.startsWith("https://pay.sandbox.paymove.io/")) {
+      setBusy(false);
+      location.assign(url); // Preserve unrecognized provider URL formats intact.
+      return;
+    }
     let Paymove;
-    try { Paymove = await loadSdk(); } catch { location.assign(body.redirectUrl); return; } // no SDK: plain redirect
+    try { Paymove = await loadSdk(); } catch { setBusy(false); location.assign(url); return; }
     let paid = false;
-    Paymove.openCheckout(body.redirectUrl, {
+    Paymove.openCheckout(url, {
       onSuccess: () => { paid = true; store.clear(); },
       onComplete: () => location.assign(thanks),
       onCancel: async () => {
@@ -350,10 +357,28 @@ form.addEventListener("submit", async e => {
   } catch (err) {
     setBusy(false);
     showAlert(err.message || t("alert.offline"));
+    const orderId = HeartshopAttempt.orderId();
+    if (orderId) {
+      const link = $("attempt-status");
+      link.href = `${I.page.thanks}?o=${encodeURIComponent(orderId)}`;
+      link.hidden = false;
+    }
   }
 });
 
 // ---------- init ----------
+function updateGiftPreview() {
+  const value = id => $(id).value.trim().replace(/\s+/g, " ");
+  $("preview-for").textContent = t("voucher.for", { name: value("recipient") || "…" });
+  $("preview-message").textContent = value("dedication") || t("voucher.defaultDedication");
+}
+
+if ($("preview-for")) {
+  $("recipient").addEventListener("input", updateGiftPreview);
+  $("dedication").addEventListener("input", updateGiftPreview);
+  updateGiftPreview();
+}
+
 async function init() {
   try {
     const res = await fetch(`${I.api}order.php`, { cache: "no-store" });
@@ -371,16 +396,17 @@ async function init() {
   $("p-name").textContent = I.local("product.name", cfg.product.name);
   $("p-variant").textContent = I.local("product.variant", cfg.product.variant);
   $("p-price").textContent = pln(cfg.product.price);
-  if (!cfg.invoice) { $("invoice-toggle").hidden = true; }
+  if (!cfg.invoice && $("invoice-toggle")) { $("invoice-toggle").hidden = true; }
   if (shipped()) buildDelivery();
   loadDraft();
+  if (!shipped()) updateGiftPreview();
   updateReveals();
   if (shipped()) showPoint();
   render();
 
   $("qty-minus").addEventListener("click", () => { qty = Math.max(1, qty - 1); render(); saveDraft(); });
   $("qty-plus").addEventListener("click", () => { qty = Math.min(cfg.product.max_qty, qty + 1); render(); saveDraft(); });
-  $("invoice").addEventListener("change", () => { updateReveals(); saveDraft(); if (touched) validate(); });
+  $("invoice")?.addEventListener("change", () => { updateReveals(); saveDraft(); if (touched) validate(); });
   $("terms").addEventListener("change", () => { if (touched) validate(); });
   if (shipped()) {
     $("point-open").addEventListener("click", openMap);

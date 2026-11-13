@@ -69,13 +69,13 @@ Back up SQLite using its backup API/CLI `.backup`, including a tested restore; d
 Run `bash scripts/heartshop/check.sh`, then exercise your HTTPS sandbox installation:
 
 - Successful payment, cancellation, timeout, duplicate and delayed signed events, amount mismatch and changed provider ID. Only verified paid events may release goods or vouchers.
-- Voucher issuance, printable code and redemption/undo. Establish the separate merchant invoicing process before live selling.
+- Voucher issuance, printable/PDF voucher and redemption/undo after buyer-email lookup. Establish the separate merchant invoicing process before live selling.
 - Mail worker failure/retry and actual delivery; panel login/logout and unauthenticated rejection.
 - HTTP redirects, allowed hosts, direct PHP-helper denial, private paths unreachable, backup restoration.
 
 Finally perform an explicitly authorized small live transaction and its operational handling before announcing the merchant shop as live-verified. This repository's initial extraction did not perform real payments, shipment purchases, invoice issuance or outbound mail.
 
-`review` and uncertain attempts require reconciliation against PAYMOVE; do not mark paid by editing SQLite without a reviewed recovery procedure. Refunds and double payments after a late completion are manual merchant operations. Inventory is not reserved or tracked by Heartshop.
+`review` orders and attempts held with `payment_review` require reconciliation against PAYMOVE (uncertain creates recover automatically; see docs/integrations.md); do not mark paid by editing SQLite without a reviewed recovery procedure. Refunds and double payments after a late completion are manual merchant operations. Inventory is not reserved or tracked by Heartshop.
 
 ## Build and hosting acceptance
 
@@ -86,9 +86,15 @@ Root `/` redirects to `/heartshop/`. Test both roots and the Host/TLS noindex gu
 See [hosting options](hosting.md) for the open hosting/operator decision and the
 production HSTS recommendation in [indexing](indexing.md).
 
+## Printable voucher
+
+`twoj-voucher.html` is a two-sided 6×4-inch voucher (front: recipient and dedication; back: service, booking details, expiry) that buyers print or download as a PDF generated in the browser with the bundled jsPDF. Its booking details (phone, address, website) are fictional sample text: replace them in the template before selling.
+
+Booking is identified by the buyer's email address, which is printed on the voucher. Buyers therefore share that address with whoever receives the voucher; say so in your terms or checkout copy. The voucher pages and buyer email no longer show internal voucher codes; the seller finds vouchers in the panel by the buyer's email.
+
 ## Voucher contact line
 
-`voucher_contact` in `api/config.php` is an optional single line (max 160 characters) added to the printable voucher and the buyer email, e.g. how to book the service. It is read from the current configuration, so a changed number also appears on older vouchers' pages; emails already sent keep the old text.
+`voucher_contact` in `api/config.php` is an optional single line (max 160 characters) that replaces the booking note on the printable voucher and is added to the buyer email, e.g. how to book the service. It is read from the current configuration, so a changed number also appears on older vouchers' pages; emails already sent keep the old text.
 
 ## Manual invoice and voucher terms review
 

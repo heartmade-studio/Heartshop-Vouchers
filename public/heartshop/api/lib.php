@@ -97,8 +97,8 @@ function secrets(): array {
 function paymoveHosts(): array {
     $sandbox = (secrets()['PAYMOVE_ENV'] ?? 'sandbox') !== 'production';
     return $sandbox
-        ? ['api' => 'https://gateway-api.sandbox.paymove.io', 'checkout' => 'checkout.sandbox.paymove.io', 'sandbox' => true]
-        : ['api' => 'https://api.paymove.io', 'checkout' => 'checkout.paymove.io', 'sandbox' => false];
+        ? ['api' => 'https://gateway-api.sandbox.paymove.io', 'status' => 'https://pay-api.sandbox.paymove.io', 'checkout' => 'checkout.sandbox.paymove.io', 'sandbox' => true]
+        : ['api' => 'https://api.paymove.io', 'status' => 'https://pay-api.paymove.io', 'checkout' => 'checkout.paymove.io', 'sandbox' => false];
 }
 
 function db(): SQLite3 {
@@ -123,6 +123,7 @@ function db(): SQLite3 {
         while ($col=$res->fetchArray(SQLITE3_ASSOC)) $cols[]=$col['name'];
         foreach (['tracking_number TEXT','courier_service TEXT','tracking_at INTEGER',
             'idempotency_key TEXT','request_hash TEXT','payment_state TEXT','payment_url TEXT',
+            'payment_attempt_at INTEGER','payment_error TEXT',
             // NULL offer_type = an order from before typed offers, i.e. shipping.
             'offer_type TEXT','note TEXT','done_at INTEGER','invoice_done_at INTEGER'] as $def) {
             if (!in_array(strtok($def,' '),$cols,true)) $conn->exec("ALTER TABLE orders ADD COLUMN $def");
@@ -164,7 +165,20 @@ function formatPln(int $grosze): string {
 }
 
 function clean(mixed $value, int $max = 120): string {
-    return is_string($value) ? trim(preg_replace('/\s+/u', ' ', mb_substr($value, 0, $max)) ?? '') : '';
+    if (!is_string($value)) return '';
+    $value = preg_replace('/\s+/u', ' ', mb_substr($value, 0, $max)) ?? '';
+    // Leftover control and bidi-override characters could disguise text in mails and the panel.
+    return trim(preg_replace('/[\p{Cc}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $value) ?? '');
+}
+
+// A demo payment costs nothing, so buyer text that reaches the buyer's mail must not carry links:
+// otherwise anyone could send a phishing message from the shop's domain to any address.
+function containsLink(string $text): bool {
+    return preg_match('~://|www\.|[\p{L}\d]\.[a-z]{2,24}(?![\p{L}\d])~iu', $text) === 1;
+}
+
+function validOrderId(mixed $id): bool {
+    return is_string($id) && preg_match('/^hs_[a-f0-9]{24}$/D', $id) === 1;
 }
 
 // Returns [order data, errors keyed by field name].
@@ -185,13 +199,17 @@ function validateOrder(array $in): array {
     if (!filter_var($o['email'], FILTER_VALIDATE_EMAIL)) $e['email'] = 'Sprawdź adres e-mail.';
 
     $o['name'] = clean($in['name'] ?? '', 80);
+    $noLinks = 'Bez linków i adresów stron. Po kropce dodaj spację.';
     if (mb_strlen($o['name']) < 3 || !str_contains($o['name'], ' ')) $e['name'] = 'Podaj imię i nazwisko.';
+    elseif (containsLink($o['name'])) $e['name'] = $noLinks;
 
     if ($offer['type'] === 'voucher') {
-        // Nothing to ship: the voucher may carry a recipient name and a short dedication.
         $o['delivery'] = '';
         $o['recipient'] = clean($in['recipient'] ?? '', 60);
+        if ($o['recipient'] === '') $e['recipient'] = 'Podaj imię osoby obdarowanej.';
+        elseif (containsLink($o['recipient'])) $e['recipient'] = $noLinks;
         $o['dedication'] = clean($in['dedication'] ?? '', 200);
+        if (containsLink($o['dedication'])) $e['dedication'] = $noLinks;
     } else {
         validateShipping($in, $c, $o, $e);
     }
@@ -226,21 +244,11 @@ function createPayment(string $externalId, string $number, array $order, int $to
     ];
     if ($c['paymove']['trigger_payment']) $details['triggerPayment'] = $c['paymove']['trigger_payment'];
 
-    $ch = curl_init($h['api'] . '/api/pay/product/' . rawurlencode($s['PAYMOVE_PRODUCT_ID']) . '/subproduct/pricing');
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 20,
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'X-API-KEY: ' . $s['PAYMOVE_API_KEY']],
-        CURLOPT_POSTFIELDS => json_encode(['price' => $total, 'externalId' => $externalId, 'details' => $details]),
-    ]);
-    $raw = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    if ($raw === false || $code !== 200) throw new RuntimeException('Paymove HTTP ' . $code);
-    $url = json_decode($raw, true)['redirectUrl'] ?? '';
-    if (!is_string($url) || !validPaymentUrl($url, $h['checkout'])) {
-        throw new RuntimeException('Unexpected Paymove redirect');
+    $body = paymoveRequest($h['api'] . '/api/pay/product/' . rawurlencode($s['PAYMOVE_PRODUCT_ID']) . '/subproduct/pricing',
+        ['price' => $total, 'externalId' => $externalId, 'details' => $details]);
+    $url = $body['redirectUrl'] ?? '';
+    if (!is_string($url) || !validPaymentUrl($url)) {
+        throw new PaymoveFailure('redirect');
     }
     return $url;
 }
@@ -252,7 +260,8 @@ function verifySignature(string $header, string $raw): bool {
     return hash_equals($expected, $m[2]);
 }
 
-function sendMail(string $to, string $subject, string $body, ?string $replyTo = null): bool {
+// $orderType is passed by the mail worker; this edition uses one sender for every order.
+function sendMail(string $to, string $subject, string $body, ?string $replyTo, string $orderType): bool {
     $from = secrets()['MAIL_FROM'] ?? '';
     $headers = [
         'From: ' . mb_encode_mimeheader(cfg()['shop']['name'], 'UTF-8') . " <$from>",
@@ -261,7 +270,7 @@ function sendMail(string $to, string $subject, string $body, ?string $replyTo = 
         'Content-Transfer-Encoding: 8bit',
     ];
     if ($replyTo) $headers[] = "Reply-To: $replyTo";
-    return mail($to, mb_encode_mimeheader($subject, 'UTF-8'), $body, implode("\r\n", $headers));
+    return mail($to, mb_encode_mimeheader($subject, 'UTF-8'), $body, implode("\r\n", $headers), '-f' . $from);
 }
 
 function orderSummary(array $order): string {
@@ -315,9 +324,11 @@ function panelOrigin(): string {
 
 function logError(Throwable $e, string $where): void {
     // Controlled category + class only; exception messages may contain provider/customer data.
-    error_log("heartshop $where: " . get_class($e));
+    error_log("heartshop $where: " . get_class($e)
+        . ($e instanceof PaymoveFailure ? ' ' . json_encode($e->diagnostic()) : ''));
 }
 
+require_once __DIR__.'/paymove.php';
 require_once __DIR__.'/checkout-state.php';
 require_once __DIR__.'/reliability.php';
 require_once __DIR__.'/vouchers.php';

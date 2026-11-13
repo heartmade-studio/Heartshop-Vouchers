@@ -11,7 +11,8 @@ This initial standalone distribution starts in **local simulation**. Live sellin
 ## Po polsku — prosty sklep, który możesz prowadzić po swojemu
 
 Sprzedajesz vouchery na swoje usługi? Heartshop Vouchers daje Ci prostą stronę
-zakupu, płatność PAYMOVE.io, kod vouchera i panel do oznaczania jego wykorzystania.
+zakupu, płatność PAYMOVE.io, dwustronny voucher do wydruku lub pobrania jako PDF
+i panel, w którym po e-mailu kupującego znajdziesz voucher i oznaczysz jego wykorzystanie.
 Termin wizyty uzgadniasz poza sklepem. Faktury wystawiasz osobno — możesz wpisać
 własną instrukcję, jak kupujący ma Cię o nie poprosić.
 
@@ -52,7 +53,7 @@ Open **http://localhost:8080/heartshop/**. Use `localhost`, not the numeric IP, 
 
 - Voucher storefront: `/heartshop/` (Polish).
 - Orders panel: `/heartshop/panel/`; local-only password: `local-heartshop-only`.
-- Place an order using made-up details. The **local simulation** dialog lets you complete or cancel it. A completed voucher produces a printable code.
+- Place an order using made-up details. The **local simulation** dialog lets you complete or cancel it. A completed voucher produces a two-sided printable voucher (print or PDF download).
 - No real payment, email or shipment is made. There are no shipping or invoicing calls.
 - Ctrl-C stops the server. Local data persists in ignored `var/local/`; deleting that directory resets synthetic orders. The launcher regenerates only its dedicated local configuration, never your merchant `.env`.
 
@@ -66,7 +67,7 @@ The local simulator is not PAYMOVE sandbox. It checks the application flow witho
 - Durable email outbox with a separate CLI worker.
 - Polish storefront, printable vouchers and seller panel.
 
-No inventory reservation, variant selector, combined multi-product cart, automatic refunds or automatic reconciliation of uncertain payments. No invoice issuance integration is provided. PAYMOVE account fees are separate from this code.
+No inventory reservation, variant selector, combined multi-product cart, automatic refunds or automatic reconciliation of payments held for `review`. Lost create responses are recovered under the same `externalId` (see [docs/integrations.md](docs/integrations.md#payment-recovery)). No invoice issuance integration is provided. PAYMOVE account fees are separate from this code.
 
 ## Deploy for real transactions
 

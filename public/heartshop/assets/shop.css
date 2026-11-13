@@ -263,7 +263,6 @@ dialog.map[open] { display: flex; flex-direction: column; }
 .v-valid, .v-how, .v-seller { font-size: 13px; color: #4a3a26; }
 .v-seller { font-weight: 600; }
 .voucher-card.used .v-code { text-decoration: line-through; opacity: .55; }
-.thumb.voucher-thumb { display: block; height: 52px; border-radius: 6px; background: linear-gradient(150deg, #fff7ea, #f0be76); box-shadow: inset 0 0 0 1px rgba(12, 23, 38, .12); }
 .thanks-visual { min-height: 0; }
 .voucher-page main { padding: 48px 0 72px; }
 .vouchers { display: grid; gap: 28px; justify-items: center; }
@@ -409,7 +408,9 @@ html[data-offer="masaz-60"] .cta-final { background: #e8d9d2; }
 .v-product { font-size: clamp(32px, 3.5vw, 46px); }
 .v-dedication, .v-valid, .v-how, .v-seller { color: #62515a; }
 .v-code-row { border-top: 1px solid #cdbab3; }
-.thumb.voucher-thumb { background: #e5d3c9; box-shadow: none; border-radius: 2px; }
+.thumb.voucher-thumb { display: grid; place-items: center; height: 52px; border-radius: 2px; background: #bb9389; }
+.voucher-thumb span { display: grid; place-items: center; width: 54px; height: 34px; transform: rotate(-5deg); background: #f8efe3; color: #4e282c; box-shadow: 0 2px 4px #754f4d55; font: italic 12px Georgia, serif; }
+.voucher-thumb span::before, .voucher-thumb span::after { content: ""; width: 38px; border-top: 1px solid #c9aaa1; }
 @media (max-width: 900px) {
   .hero { min-height: 0; gap: 5%; }
   .hero h1 { font-size: clamp(48px, 7vw, 68px); }
