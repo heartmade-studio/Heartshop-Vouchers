@@ -553,6 +553,15 @@ test('landing hides the price list when nothing is on sale',async()=>{
   assert.deepEqual(buys.map(b=>b.replacedBy?.textContent),['Sprzedaż voucherów jest chwilowo wstrzymana',undefined,'Sprzedaż voucherów jest chwilowo wstrzymana']);
   assert.equal(buys[1].children[0].textContent,'Sprzedaż voucherów jest chwilowo wstrzymana');
 });
+test('every order link on the real landing page is covered by the sales-closed notice',()=>{
+  // The price list is hidden as a whole; the hero purchase block is replaced as a container.
+  const html=fs.readFileSync(path.join(root,'public/heartshop/index.html'),'utf8')
+    .replace(/<!-- BEGIN VOUCHER PRICES -->[\s\S]*?<!-- END VOUCHER PRICES -->/,'')
+    .replace(/<div class="gift-purchase" data-buy>[\s\S]*?<\/div>/,'');
+  const links=html.match(/<a\b[^>]*href="(?:zamowienie|order)\.html[^"]*"[^>]*>/g)||[];
+  assert.ok(links.length>0);
+  assert.deepEqual(links.filter(a=>!/\sdata-buy[\s>]/.test(a)),[]);
+});
 test('landing keeps buy links while a voucher is on sale',async()=>{
   const {buys}=await landingList([false,true,false]);
   assert.ok(buys.every(b=>!b.replacedBy && !b.children));
