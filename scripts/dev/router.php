@@ -15,7 +15,7 @@ if ($path==='/__dev/settle' || ($path==='/heartshop/api/order.php')) {
     require $web.'/heartshop/api/lib.php';
     try {
         if ($_SERVER['REQUEST_METHOD']==='GET' && $path==='/heartshop/api/order.php') {
-            $c=cfg();$offers=[];foreach(array_keys($c['offers']) as $id) $offers[$id]=offer($id);
+            $c=cfg();$offers=[];foreach(array_keys($c['offers']) as $id) $offers[$id]=offer($id)+['sellable'=>true]; // the simulator is always a sandbox
             jsonOut(['offers'=>(object)$offers,'defaultOffer'=>$c['default_offer'],'product'=>offer(null),
                 'delivery'=>$c['delivery'], 'freeShippingFrom'=>$c['free_shipping_from'],
                 'invoice'=>$c['invoice'],'sandbox'=>true,'paymoveSdk'=>'/__dev/paymove.js','geowidgetToken'=>'','geowidgetSandbox'=>true]);

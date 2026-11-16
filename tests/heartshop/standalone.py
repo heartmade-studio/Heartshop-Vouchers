@@ -30,6 +30,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
             time.sleep(.05)
         else:raise AssertionError('Server failed: '+(base/'server.log').read_text())
         code,cfg,_=request('/heartshop/api/order.php');assert code==200
+        assert all(o['sellable'] is True for o in cfg['offers'].values())  # the sandbox sells every offer
         assert cfg['sandbox'] is True
         typ='shipping' if KIND=='goods' else 'voucher'
         assert cfg['product']['type']==typ
@@ -113,13 +114,18 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
 $_SERVER['DOCUMENT_ROOT']=$argv[1].'/public';require $argv[1].'/public/heartshop/api/lib.php';
 $input=['qty'=>1,'name'=>'Test Buyer','email'=>'buyer@example.invalid','recipient'=>'Ania','terms'=>true,'invoice'=>false,'phone'=>'500600700','delivery'=>'kurier','street'=>'Test 1','postcode'=>'00-001','city'=>'Test'];
 $calls=0;$lost=($argv[3]??'')==='lost';$now=time()+(int)($argv[4]??0);
+$ids=array_keys(cfg()['offers']);$sellable=array_combine($ids,array_map(fn($id)=>offerSellable(offer($id)),$ids));
 // 'lost': the create request never reaches PAYMOVE, leaving the order uncertain.
 $provider=function($id)use(&$calls,$lost){$calls++;if($lost)throw new PaymoveFailure('network',0,7);return 'https://checkout.paymove.io/fixture/'.$id;};
-try { $result=prepareCheckout($input,str_repeat($argv[2],32),$provider,$now);echo json_encode(['calls'=>$calls,'order'=>findOrder($result['orderId'])]); }
-catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason,'orderId'=>$e->orderId]);}
+try { $result=prepareCheckout($input,str_repeat($argv[2],32),$provider,$now);echo json_encode(['calls'=>$calls,'order'=>findOrder($result['orderId']),'sellable'=>$sellable]); }
+catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason,'orderId'=>$e->orderId,'sellable'=>$sellable]);}
 ''')
     penv=dict(os.environ,HEARTSHOP_ENV_FILE=str(env));penv.pop('HEARTSHOP_ORIGIN',None)
-    def production(key,mode='',later=0):return json.loads(subprocess.check_output(['php',str(runner),str(repo),key,mode,str(later)],env=penv,stderr=subprocess.DEVNULL))
+    def production(key,mode='',later=0):
+        r=json.loads(subprocess.check_output(['php',str(runner),str(repo),key,mode,str(later)],env=penv,stderr=subprocess.DEVNULL))
+        # The published `sellable` flag is the same rule checkout enforces for the default offer.
+        if mode=='' and later==0:assert r['sellable'][cfg['defaultOffer']]==(r.get('error')!='demo_only'),r
+        return r
     p=runtime/'config.php';original=p.read_text()
     a=production('c');assert a['error']=='demo_only' and a['calls']==0
     p.write_text(original.replace("'production_ready' => false","'production_ready' => true"))
@@ -132,6 +138,11 @@ catch(CheckoutProblem $e){echo json_encode(['calls'=>$calls,'error'=>$e->reason,
         p.write_text(p.read_text().replace('To przykładowa instrukcja do zatwierdzenia przez sprzedawcę.','Fakturę wystawimy ręcznie.'))
     a=production('f');assert a['calls']==1 and a['order']['data']['snapshot']['demo'] is False and a['order']['data']['snapshot']['test_payment'] is False
     assert a['order']['offer_type']==typ
+    if typ=='voucher':
+        # A demo sample left next to a real voucher is published as not sellable and refused at checkout.
+        real=p.read_text();p.write_text(real.replace("'demo'         => false","'demo'         => true").replace("'demo'         => true","'demo'         => false",1))
+        a=production('8');assert a['calls']==1 and a['sellable']=={'masaz-60':True,'masaz-120':False,'masaz-czekolada':False},a
+        p.write_text(real)
     print('PASS production gates: default denied, each independent gate denied, configured real offer accepted with stub provider')
     # A recovered retry re-checks the CURRENT gates before creating a payment.
     r=production('7','lost');assert r['error']=='payment_wait' and r['calls']==1
