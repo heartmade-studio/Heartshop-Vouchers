@@ -14,6 +14,7 @@ function card(o, v) {
   set(".gift-for", o.recipient ? t("voucher.for", { name: o.recipient }) : "");
   set(".gift-message", o.dedication || t("voucher.defaultDedication"));
   set(".service-cover h2", o.product);
+  set(".booking-price", I.money(o.unitPrice));
   set(".booking-email", o.buyerEmail);
   set(".booking-code", v.code);
   set(".booking-expiry", v.expires);

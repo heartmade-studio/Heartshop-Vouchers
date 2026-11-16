@@ -61,13 +61,13 @@ The local simulator is not PAYMOVE sandbox. It checks the application flow witho
 
 ## What is included
 
-- Server-priced PLN checkout, voucher example.
+- Three example voucher options (PLN 250, 400 and 600), with a price table, checkout selector and the purchased unit value on each PDF.
 - PAYMOVE hosted checkout, HMAC-verified webhooks, immutable order snapshots and retry protection.
 - Seller panel: orders, notes, CSV, voucher redemption and fulfillment markers.
 - Durable email outbox with a separate CLI worker.
 - Polish storefront, printable vouchers and seller panel.
 
-No inventory reservation, variant selector, combined multi-product cart, automatic refunds or automatic reconciliation of payments held for `review`. Lost create responses are recovered under the same `externalId` (see [docs/integrations.md](docs/integrations.md#payment-recovery)). No invoice issuance integration is provided. PAYMOVE account fees are separate from this code.
+No inventory reservation, combined multi-product cart, automatic refunds or automatic reconciliation of payments held for `review`. Lost create responses are recovered under the same `externalId` (see [docs/integrations.md](docs/integrations.md#payment-recovery)). No invoice issuance integration is provided. PAYMOVE account fees are separate from this code.
 
 ## Deploy for real transactions
 

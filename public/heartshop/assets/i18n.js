@@ -28,6 +28,7 @@ window.HeartshopI18n = (() => {
       "alert.down": "Sklep jest chwilowo niedostępny. Odśwież stronę za chwilę.",
       "methods": "Płatności online",
       "attempt.unreadable": "Nie można odczytać poprzedniej próby. Nie płać ponownie — skontaktuj się ze sklepem.",
+      "attempt.voucherChanged": "Przywróć wariant vouchera i dane z poprzedniej próby płatności lub skontaktuj się ze sklepem.",
       "attempt.changed": "Najpierw sprawdź poprzednią próbę płatności. Przywróć dane poprzedniego zamówienia albo skontaktuj się ze sklepem.",
       "attempt.unsaved": "Nie można bezpiecznie zapisać próby płatności.",
       "thanks.paid.title": "Dziękujemy{name}!",
@@ -83,6 +84,7 @@ window.HeartshopI18n = (() => {
       "alert.down": "The shop is temporarily unavailable. Refresh the page in a moment.",
       "methods": "Online payments",
       "attempt.unreadable": "The previous attempt cannot be read. Do not pay again — contact the shop.",
+      "attempt.voucherChanged": "Restore the voucher option and details from your previous payment attempt or contact the shop.",
       "attempt.changed": "Check the previous payment attempt first. Restore the previous order's details or contact the shop.",
       "attempt.unsaved": "The payment attempt cannot be saved safely.",
       "code.attempt_conflict": "The previous attempt has different details. Do not pay again; contact the shop.",
@@ -122,6 +124,7 @@ window.HeartshopI18n = (() => {
     // The offer this page sells (<html data-offer>); null = the shop's default offer.
     offer: html?.dataset?.offer || null,
     page: lang === "en" ? { order: "order.html", thanks: "thank-you.html" } : { order: "zamowienie.html", thanks: "dziekujemy.html" },
+    voucherChoices: (offers, product) => Object.values(offers || {}).filter(o => o.type === "voucher" && o.path === product.path),
     money: g => (g / 100).toLocaleString(lang === "en" ? "en-GB" : "pl-PL", { style: "currency", currency: "PLN" }),
     // Server copy (product, delivery) is Polish; English pages replace it when a translation exists.
     local: (key, server) => (lang === "pl" || !has(key) ? server : text[lang][key]),

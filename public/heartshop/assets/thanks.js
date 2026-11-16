@@ -34,6 +34,8 @@ function show(state, o = {}) {
     $("title").textContent = t("thanks.paid.title", { name: o.name ? ", " + o.name : "" });
     $("text").textContent = t(o.type === "voucher" ? "thanks.voucher.text" : "thanks.paid.text", { number: o.number, total: pln(o.total), email: o.email });
     if (o.type === "voucher") {
+      const product = $("voucher-product");
+      if (product && o.product) product.textContent = o.product;
       $("action").textContent = t("thanks.voucher.action");
       $("action").href = `twoj-voucher.html?o=${encodeURIComponent(id)}`;
     }

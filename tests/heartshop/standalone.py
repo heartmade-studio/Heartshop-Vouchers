@@ -30,10 +30,10 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
             time.sleep(.05)
         else:raise AssertionError('Server failed: '+(base/'server.log').read_text())
         code,cfg,_=request('/heartshop/api/order.php');assert code==200
-        assert len(cfg['offers'])==1 and cfg['sandbox'] is True
+        assert cfg['sandbox'] is True
         typ='shipping' if KIND=='goods' else 'voucher'
         assert cfg['product']['type']==typ
-        if KIND=='goods':assert cfg['invoice'] is True and cfg['delivery']['kurier']
+        if KIND=='goods':assert len(cfg['offers'])==1 and cfg['invoice'] is True and cfg['delivery']['kurier']
         else:
             assert cfg['invoice'] is False and not cfg['delivery']
             assert not (repo/'public/heartshop/api/furgonetka.php').exists()
@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         status=request('/heartshop/api/status.php?o='+order['orderId'])[1]
         assert status['status']=='paid' and status['demo'] is True and status['testPayment'] is True and status['type']==typ
         if KIND=='vouchers':
-            assert len(status['vouchers'])==1
+            assert status['unitPrice']==25000 and len(status['vouchers'])==1
             with sqlite3.connect(repo/'var/local/orders.sqlite') as db:
                 snap=json.loads(db.execute('SELECT data FROM orders WHERE external_id=?',(order['orderId'],)).fetchone()[0])['snapshot']
                 body=db.execute('SELECT body FROM mail_outbox WHERE recipient=?',('buyer@example.invalid',)).fetchone()[0]
@@ -88,6 +88,16 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         assert request('/heartshop/api/status.php?o='+first['orderId'])[1]['status']=='paid'
         code,done,_=request('/heartshop/api/order.php',data,retry);assert code==200 and done=={'orderId':first['orderId'],'status':'paid'},done
         print('PASS local simulator: cancel, retry and pay keep one order')
+        if KIND=='vouchers':
+            landing=request('/heartshop/')[1].decode()
+            for key, (offer,price) in enumerate([('masaz-120',40000),('masaz-czekolada',60000)],1):
+                assert f'zamowienie.html?offer={offer}' in landing
+                payload=dict(data,offer=offer,qty=2,price=1)
+                code,purchase,_=request('/heartshop/api/order.php',payload,{'Idempotency-Key':str(key)*32})
+                assert code==200 and purchase['total']==2*price
+                request('/__dev/settle',{'orderId':purchase['orderId']})
+                paid=request('/heartshop/api/status.php?o='+purchase['orderId'])[1]
+                assert paid['unitPrice']==price and paid['demo'] and len(paid['vouchers'])==2
         assert request('/__dev/paymove.js')[0]==200
         print('PASS actual '+KIND+' distribution: start, boundaries, order, idempotency, simulation, panel and fulfillment isolation')
     finally:
