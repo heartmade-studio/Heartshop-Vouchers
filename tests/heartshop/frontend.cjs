@@ -602,7 +602,7 @@ test('voucher requires a recipient and previews the printed wording while typing
   assert.equal(p.element('preview-message').textContent,'Dla ukochanej Olgi');
   dedication.value='';
   dedication.handlers.input();
-  assert.equal(p.element('preview-message').textContent,'Na chwilę tylko dla Ciebie.');
+  assert.equal(p.element('preview-message').textContent,'');
 });
 
 test('voucher checkout needs no phone or address and names its offer',async()=>{
@@ -673,6 +673,8 @@ test('printed voucher books by buyer email and shows its own number',()=>{
   assert.equal(part('.booking-email').textContent,'giver@example.invalid');
   assert.equal(part('.booking-code').textContent,'K7PM-4QXT');
   assert.equal(part('.gift-for').textContent,'Dla Ani');
+  assert.equal(part('.gift-message').textContent,'');
+  assert.equal(part('.gift-message').hidden,true);
 });
 test('demo voucher prints no demo label (owner decision)',()=>{
   assert.equal(voucherCard({product:'Masaż',recipient:'Ani',demo:true,testPayment:true})('.voucher-demo').hidden,true);

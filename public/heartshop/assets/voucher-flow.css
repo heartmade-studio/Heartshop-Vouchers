@@ -67,6 +67,7 @@
 .gift-preview-card p { margin: 6px 0 0; }
 #preview-for { font-size: 1.25rem; }
 #preview-message { font-style: italic; }
+#preview-message:empty { display: none; }
 
 .voucher-choice { margin-top: 1rem; }
 .voucher-choice select { width: 100%; min-height: 44px; padding: 8px; font: inherit; color: var(--ink); background: var(--cream); border: 1px solid var(--dim); border-radius: 4px; }

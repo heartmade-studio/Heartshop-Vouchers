@@ -53,7 +53,6 @@ window.HeartshopI18n = (() => {
       "thanks.voucher.action": "Zobacz i wydrukuj voucher",
       "voucher.title": "Voucher podarunkowy",
       "voucher.for": "Dla {name}",
-      "voucher.defaultDedication": "Na chwilę tylko dla Ciebie.",
       "err.recipient": "Podaj imię osoby obdarowanej.",
       "voucher.code": "E-mail kupującego",
       "voucher.valid": "Ważny do {date}",

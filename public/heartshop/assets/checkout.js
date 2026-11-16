@@ -381,7 +381,7 @@ form.addEventListener("submit", async e => {
 function updateGiftPreview() {
   const value = id => $(id).value.trim().replace(/\s+/g, " ");
   $("preview-for").textContent = t("voucher.for", { name: value("recipient") || "…" });
-  $("preview-message").textContent = value("dedication") || t("voucher.defaultDedication");
+  $("preview-message").textContent = value("dedication");
 }
 
 if ($("preview-for")) {
