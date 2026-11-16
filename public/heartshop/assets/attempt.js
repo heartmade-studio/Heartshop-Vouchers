@@ -11,6 +11,7 @@ window.HeartshopAttempt = (() => {
     catch { return null; }
   };
   return {
+    offerId() { return stored()?.offer || null; },
     orderId() {
       const id = stored()?.orderId;
       return orderPattern.test(id || '') ? id : null;
@@ -24,11 +25,12 @@ window.HeartshopAttempt = (() => {
           throw new Error(t('attempt.unreadable'));
         }
         if (attempt.fingerprint !== fingerprint) {
-          throw new Error(t('attempt.changed'));
+          throw new Error(t(payload.recipient !== undefined ? 'attempt.voucherChanged' : 'attempt.changed'));
         }
         return attempt.key;
       }
       const attempt = { key: hex(crypto.getRandomValues(new Uint8Array(16))), fingerprint };
+      if (payload.offer) attempt.offer = payload.offer;
       const value = JSON.stringify(attempt);
       sessionStorage.setItem(key, value);
       if (sessionStorage.getItem(key) !== value) throw new Error(t('attempt.unsaved'));

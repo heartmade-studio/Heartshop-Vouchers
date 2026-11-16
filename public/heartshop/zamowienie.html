@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="stylesheet" href="assets/shop.css?v=11">
 <link rel="stylesheet" href="assets/voucher-landing.css?v=1">
-<link rel="stylesheet" href="assets/voucher-flow.css?v=3">
+<link rel="stylesheet" href="assets/voucher-flow.css?v=4">
 </head>
 <body class="voucher-landing voucher-flow">
 <div class="demo-banner" id="demo-banner" hidden>Tryb testowy — zapłać BLIK-iem z kodem 777123, płatność nie zostanie pobrana.</div>
@@ -33,6 +33,11 @@
               <div class="variant" id="p-variant"></div>
             </div>
             <div class="price-each" id="p-price"></div>
+          </div>
+          <div class="field voucher-choice">
+            <label for="voucher-offer">Wybierz voucher</label>
+            <select id="voucher-offer" aria-describedby="voucher-lock-note" disabled></select>
+            <p class="hint" id="voucher-lock-note" hidden>Możesz wznowić poprzednią płatność za ten sam voucher.</p>
           </div>
           <div class="qty-row">
             <span id="qty-label">Liczba voucherów</span>
@@ -117,8 +122,8 @@
     <nav><a href="regulamin.html">Regulamin</a><a href="polityka-prywatnosci.html">Polityka prywatności</a></nav>
   </div>
 </footer>
-<script src="assets/i18n.js?v=8"></script>
-<script src="assets/attempt.js?v=6"></script>
-<script src="assets/checkout.js?v=26"></script>
+<script src="assets/i18n.js?v=9"></script>
+<script src="assets/attempt.js?v=7"></script>
+<script src="assets/checkout.js?v=27"></script>
 </body>
 </html>

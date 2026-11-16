@@ -18,7 +18,6 @@ if ($enabled && (($c['production_ready'] ?? false) !== true || ($o['demo'] ?? tr
 if ($enabled && function_exists('invoiceTextNeedsApproval') && invoiceTextNeedsApproval($c)) {
     throw new RuntimeException('Indexing requires the seller-approved invoice_request_text');
 }
-if (!is_int($o['price']) || $o['price'] <= 0) throw new RuntimeException('Offer price must be positive integer grosze');
 if (!in_array($seo['seller_type'], ['ProfessionalService', 'LocalBusiness'], true)) throw new RuntimeException('Invalid seller type');
 $e = static fn($s) => htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 function replaceBlock(string $html, string $label, string $content, string $before): string {
@@ -26,6 +25,11 @@ function replaceBlock(string $html, string $label, string $content, string $befo
     $pattern = '#<!-- BEGIN '.preg_quote($label, '#').' -->.*?<!-- END '.preg_quote($label, '#').' -->#s';
     return preg_match($pattern, $html) ? preg_replace_callback($pattern, fn() => $block, $html) : str_replace($before, $block."\n".$before, $html);
 }
+$choices = array_filter($c['offers'], static fn($v) => $v['type'] === 'voucher' && ($v['path'] ?? '') === ($o['path'] ?? ''));
+foreach ($choices as $choice) {
+    if (!is_int($choice['price']) || $choice['price'] <= 0) throw new RuntimeException('Offer price must be positive integer grosze');
+}
+$startingPrice = min(array_column($choices, 'price'));
 $pages = ['index.html'=>'pl'];
 if (is_file($root.'/public/heartshop/en/index.html')) $pages['en/index.html']='en';
 $files = []; $urls = [];
@@ -37,10 +41,11 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/pu
     $robots = $enabled && $landing ? 'index, follow' : 'noindex, nofollow';
     $html = preg_replace('#<meta name="robots" content="[^"]*">#', '<meta name="robots" content="'.$robots.'">', $html);
     // Fallback prices are also correct without JavaScript. Checkout still prices on the server.
-    $html = preg_replace_callback('#(<[^>]+\bdata-price(?:="[^"]*")?[^>]*>)[^<]*#', fn($m) => $m[1].$e(formatPln($o['price'])), $html);
+    $html = preg_replace_callback('#(<[^>]+\bdata-price(?:="[^"]*")?[^>]*>)[^<]*#', fn($m) => $m[1].$e(formatPln($startingPrice)), $html);
     if ($landing) {
         $description = (string)$seo['description'][$lang];
-        $title = $o['name'].' — '.$c['shop']['seller'];
+        $heading = count($choices) > 1 ? $c['shop']['name'] : $o['name'];
+        $title = $heading.' — '.$c['shop']['seller'];
         $path = $base.'/'.($lang === 'en' ? 'en/' : ''); $url = $origin.$path;
         $html = preg_replace_callback('#<title>.*?</title>#s', fn() => '<title>'.$e($title).'</title>', $html);
         $html = preg_replace_callback('#<meta name="description" content="[^"]*">#', fn() => '<meta name="description" content="'.$e($description).'">', $html);
@@ -62,6 +67,16 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/pu
             }
             $head .= '<script type="application/ld+json">'.json_encode($schema, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR).'</script>';
         }
+        $rows = [];
+        foreach ($choices as $id => $choice) {
+            $href = ($lang === 'en' ? 'order.html' : 'zamowienie.html').'?offer='.rawurlencode((string)$id);
+            $rows[] = '<tr><td><a href="'.$e($href).'">'.$e($choice['name']).'</a></td>'
+                .'<td data-offer-price="'.$e($id).'">'.$e(formatPln($choice['price'])).'</td></tr>';
+        }
+        $table = '<section class="voucher-pricing wrap"><table><caption>Wybierz voucher</caption>'
+            .'<thead><tr><th scope="col">Usługa</th><th scope="col">Cena</th></tr></thead><tbody>'
+            .implode("\n", $rows).'</tbody></table></section>';
+        $html = replaceBlock($html, 'VOUCHER PRICES', $table, '<section class="gift-story">');
         $html = replaceBlock($html, 'STOREFRONT METADATA', $head, '</head>');
         $visible = '<section class="wrap" aria-label="'.($lang==='en'?'Offer and seller':'Oferta i sprzedawca').'">'
             .'<h2>'.$e($o['name']).'</h2><p>'.$e($description).'</p><p>'.$e($c['shop']['seller'])

@@ -14,7 +14,13 @@ fetch(`${I.api}order.php`, { cache: "no-store" })
     const product = (I.offer && cfg.offers?.[I.offer]) || cfg.product;
     document.getElementById("demo-banner").hidden = !cfg.sandbox;
     syncBannerOffset();
-    document.querySelectorAll("[data-price]").forEach(el => el.textContent = pln(product.price));
+    const choices = product.type === "voucher" ? I.voucherChoices(cfg.offers, product) : [];
+    const price = choices.length ? Math.min(...choices.map(o => o.price)) : product.price;
+    document.querySelectorAll("[data-price]").forEach(el => el.textContent = pln(price));
+    document.querySelectorAll("[data-offer-price]").forEach(el => {
+      const offer = cfg.offers?.[el.dataset.offerPrice];
+      if (offer) el.textContent = pln(offer.price);
+    });
     document.querySelectorAll("[data-ship]").forEach(el => {
       const d = cfg.delivery[el.dataset.ship];
       if (d) el.textContent = pln(d.price);

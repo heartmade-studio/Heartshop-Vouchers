@@ -162,7 +162,7 @@ function validNip(nip) {
 function collect() {
   const v = id => $(id).value.trim();
   // Pages without data-offer send exactly what they always sent, so an open attempt survives a deploy.
-  const data = I.offer ? { offer: I.offer } : {};
+  const data = I.offer ? { offer: cfg.product.id || I.offer } : {};
   Object.assign(data, { qty, email: v("email") });
   if (shipped()) {
     // Key order is part of the attempt fingerprint (JSON.stringify): keep it as it always was.
@@ -239,6 +239,7 @@ const DRAFT_FIELDS = ["email", "phone", "name", "street", "postal", "city", "rec
   "company", "nip", "company_address", "point-input"].filter(id => $(id));
 function saveDraft() {
   const d = { qty, delivery: selectedDelivery(), invoice: Boolean($("invoice")?.checked), point };
+  if (!shipped()) d.offer = cfg.product.id;
   DRAFT_FIELDS.forEach(id => d[id] = $(id).value);
   store.write(d);
 }
@@ -274,9 +275,18 @@ function checkoutUrl(redirectUrl) {
   return `https://checkout.sandbox.paymove.io/${match[1]}?externalId=${match[2]}`;
 }
 
+function updateVoucherLock() {
+  const select = $("voucher-offer");
+  if (!select || shipped()) return;
+  const locked = HeartshopAttempt.offerId() === cfg.product.id;
+  select.disabled = submitting || locked;
+  $("voucher-lock-note").hidden = !locked;
+}
+
 function setBusy(on) {
   submitting = on;
   payBtn.disabled = on;
+  updateVoucherLock();
   render();
 }
 
@@ -379,6 +389,12 @@ if ($("preview-for")) {
   updateGiftPreview();
 }
 
+function renderProduct() {
+  $("p-name").textContent = I.local("product.name", cfg.product.name);
+  $("p-variant").textContent = I.local("product.variant", cfg.product.variant);
+  $("p-price").textContent = pln(cfg.product.price);
+}
+
 async function init() {
   try {
     const res = await fetch(`${I.api}order.php`, { cache: "no-store" });
@@ -393,13 +409,40 @@ async function init() {
   }
   $("demo-banner").hidden = !cfg.sandbox;
   syncBannerOffset();
-  $("p-name").textContent = I.local("product.name", cfg.product.name);
-  $("p-variant").textContent = I.local("product.variant", cfg.product.variant);
-  $("p-price").textContent = pln(cfg.product.price);
+  const select = $("voucher-offer");
+  if (!shipped() && select) {
+    const choices = I.voucherChoices(cfg.offers, cfg.product);
+    for (const o of choices) {
+      select.add(new Option(pln(o.price) + " · " + o.name, o.id));
+    }
+    const saved = store.read().offer;
+    const url = new URL(location.href);
+    const requested = url.searchParams.get("offer");
+    const previous = HeartshopAttempt.offerId();
+    const candidates = [previous, !HeartshopAttempt.orderId() && requested, saved];
+    select.value = candidates.find(id => choices.some(o => o.id === id)) || cfg.product.id;
+    if (requested !== null) {
+      url.searchParams.delete("offer");
+      history.replaceState(history.state, "", url);
+    }
+    cfg.product = cfg.offers[select.value];
+    updateVoucherLock();
+    select.addEventListener("change", () => {
+      cfg.product = cfg.offers[select.value];
+      qty = Math.min(qty, cfg.product.max_qty);
+      renderProduct();
+      render();
+      saveDraft();
+    });
+  }
+  renderProduct();
   if (!cfg.invoice && $("invoice-toggle")) { $("invoice-toggle").hidden = true; }
   if (shipped()) buildDelivery();
   loadDraft();
-  if (!shipped()) updateGiftPreview();
+  if (!shipped()) {
+    saveDraft();
+    updateGiftPreview();
+  }
   updateReveals();
   if (shipped()) showPoint();
   render();

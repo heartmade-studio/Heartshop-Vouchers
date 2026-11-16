@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add three example voucher prices, linked from the storefront to the checkout selector. Each printed or downloaded voucher shows its purchased unit value.
+
 ## v0.1.0 — 2026-11-13
 
 - Standalone Heartshop Vouchers with local simulation, PAYMOVE checkout and seller panel.

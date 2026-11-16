@@ -25,6 +25,7 @@ try {
     // The order id in the link is the bearer token for its vouchers; only a paid order has codes.
     if ($out['type'] === 'voucher' && $order['status'] === 'paid') {
         $out += [
+            'unitPrice'   => $d['snapshot']['unit_price'],
             'buyerEmail'  => $d['email'],
             'product'    => $d['snapshot']['name'],
             'recipient'  => $d['recipient'] ?? '',
