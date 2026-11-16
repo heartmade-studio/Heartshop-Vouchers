@@ -90,7 +90,7 @@ Tests run with synthetic credentials and isolated temporary databases. They cove
 - [Merchant indexing and metadata](docs/indexing.md)
 - [Hosting options](docs/hosting.md)
 - [Edition isolation follow-up](docs/edition-isolation.md)
-- [v0.1.0 release notes](docs/releases/v0.1.0.md)
+- [v0.2.0 release notes](docs/releases/v0.2.0.md)
 - [Architecture and extraction boundaries](docs/architecture.md)
 - [Production setup](docs/production.md)
 - [PAYMOVE contract](docs/integrations.md)
