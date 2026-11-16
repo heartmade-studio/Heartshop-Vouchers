@@ -12,7 +12,7 @@ function card(o, v) {
   el.querySelector(".voucher-demo").hidden = o.demo || !o.testPayment;
   // Older orders may have no recipient: print no name rather than an invented one.
   set(".gift-for", o.recipient ? t("voucher.for", { name: o.recipient }) : "");
-  set(".gift-message", o.dedication || t("voucher.defaultDedication"));
+  set(".gift-message", o.dedication || "");
   set(".service-cover h2", o.product);
   set(".booking-price", I.money(o.unitPrice));
   set(".booking-email", o.buyerEmail);
