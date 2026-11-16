@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Add three example voucher prices, linked from the storefront to the checkout selector. Each printed or downloaded voucher shows its purchased unit value.
-- The price list, "from" price and checkout selector offer only vouchers the server would sell now (`sellable` in `order.php`, the same rule as checkout); the price list is rebuilt from that set, and the built table is only the no-JavaScript fallback. A generic "buy" link opens on the first voucher on sale; when none is, checkout says so before the form is filled and the price list is hidden. A voucher locked to an unconfirmed payment can be resumed; choosing another one goes through the shop. Several options publish an `AggregateOffer`, and the build fails when a template loses a generated-block anchor.
+- The price list, "from" price and checkout selector offer only vouchers the server would sell now (`sellable` in `order.php`, the same rule as checkout); the price list is rebuilt from that set, and the built table is only the no-JavaScript fallback. A generic "buy" link opens on the first voucher on sale; when none is, checkout says so before the form is filled and the landing page replaces its buy links, "from" price and price list with a notice. A started payment keeps its voucher after the shop withdraws it, so it can still be resumed. A voucher locked to an unconfirmed payment can be resumed; choosing another one goes through the shop. Several options publish an `AggregateOffer`, and the build fails when a template loses a generated-block anchor.
 
 ## v0.1.0 — 2026-11-13
 

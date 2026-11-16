@@ -470,8 +470,8 @@ test('pricing links preselect only local vouchers and a canceled attempt keeps i
   assert.equal(await p.context.HeartshopAttempt.begin(p.context.collect()),key);
 });
 
-async function openVoucherCheckout(offers,search='') {
-  const p=await voucherCheckout();
+async function openVoucherCheckout(offers,search='',store=storage()) {
+  const p=await voucherCheckout(store);
   for(const [id,o] of Object.entries(offers)) offers[id]={id,type:'voucher',path:'voucher/',max_qty:5,name:id,...o};
   const posts=[];
   p.context.fetch=async(url,o)=>{if(o?.method==='POST')posts.push(url);return {ok:true,json:async()=>({offers})};};
@@ -488,6 +488,30 @@ test('a generic "buy" link opens on the first voucher on sale when the page vouc
   assert.equal(vm.runInContext('cfg.product.id',p.context),'masaz-120');
   assert.equal(p.element('pay').disabled,false);
   assert.equal(p.element('form-alert').textContent,'');
+});
+test('a started payment keeps its withdrawn voucher and resumes with the same key',async()=>{
+  const store=storage();
+  const first=await openVoucherCheckout({'masaz-60':{price:25000,sellable:true},'masaz-120':{price:40000,sellable:true}},'?offer=masaz-120',store);
+  assert.equal(first.p.element('voucher-offer').value,'masaz-120');
+  const key=await first.p.context.HeartshopAttempt.begin(first.p.context.collect());
+  first.p.context.HeartshopAttempt.remember(key,orderA);
+  // The shop withdraws the 400 zł voucher, then the buyer reopens checkout.
+  const {p}=await openVoucherCheckout({'masaz-60':{price:25000,sellable:true},'masaz-120':{price:40000,sellable:false}},'',store);
+  assert.equal(p.element('voucher-offer').value,'masaz-120');
+  assert.equal(p.element('voucher-offer').disabled,true);
+  assert.equal(p.element('pay').disabled,false);
+  assert.equal(JSON.parse(store.getItem('heartshop-draft:/heartshop/voucher/')).offer,'masaz-120');
+  assert.equal(await p.context.HeartshopAttempt.begin(p.context.collect()),key);
+});
+test('a started payment can be resumed even when nothing else is on sale',async()=>{
+  const store=storage();
+  const first=await openVoucherCheckout({'masaz-60':{price:25000,sellable:true}},'',store);
+  const key=await first.p.context.HeartshopAttempt.begin(first.p.context.collect());
+  first.p.context.HeartshopAttempt.remember(key,orderA);
+  const {p}=await openVoucherCheckout({'masaz-60':{price:25000,sellable:false}},'',store);
+  assert.equal(p.element('pay').disabled,false);
+  assert.equal(p.element('form-alert').textContent,'');
+  assert.equal(await p.context.HeartshopAttempt.begin(p.context.collect()),key);
 });
 test('checkout says sales are closed before the form is filled and never submits',async()=>{
   const {p,posts}=await openVoucherCheckout({'masaz-60':{price:25000,sellable:false},'masaz-120':{price:40000,sellable:false}});
@@ -506,13 +530,15 @@ async function landingList(sellable) {
   const list={hidden:false,querySelector:()=>body};
   p.context.document.querySelector=sel=>sel==='.voucher-pricing'?list:p.element('header');
   p.context.document.createElement=make;
+  const buys=['A','DIV','A'].map(tagName=>({tagName,replaceWith(n){this.replacedBy=n;},replaceChildren(...c){this.children=c;}}));
+  p.context.document.querySelectorAll=sel=>sel==='[data-buy]'?buys:[];
   const offers={};
   for(const [i,[id,price]] of [['masaz-60',25000],['masaz-120',40000],['masaz-czekolada',60000]].entries())
     offers[id]={id,price,sellable:sellable[i],type:'voucher',path:'',name:id};
   p.context.fetch=async()=>({ok:true,json:async()=>({sandbox:false,offers,product:offers['masaz-60'],delivery:{},freeShippingFrom:null})});
   p.run('landing.js');
   await new Promise(resolve=>setImmediate(resolve));
-  return {list,rows:body.rows};
+  return {list,rows:body.rows,buys};
 }
 test('landing price list shows exactly the vouchers on sale, adding ones the build left out',async()=>{
   const {list,rows}=await landingList([true,true,false]);
@@ -521,8 +547,15 @@ test('landing price list shows exactly the vouchers on sale, adding ones the bui
   assert.deepEqual(rows.map(r=>r.children[1].dataset.offerPrice),['masaz-60','masaz-120']);
 });
 test('landing hides the price list when nothing is on sale',async()=>{
-  const {list}=await landingList([false,false,false]);
+  const {list,buys}=await landingList([false,false,false]);
   assert.equal(list.hidden,true);
+  // Every buy link and "from" price becomes a notice; the hero container keeps its layout.
+  assert.deepEqual(buys.map(b=>b.replacedBy?.textContent),['Sprzedaż voucherów jest chwilowo wstrzymana',undefined,'Sprzedaż voucherów jest chwilowo wstrzymana']);
+  assert.equal(buys[1].children[0].textContent,'Sprzedaż voucherów jest chwilowo wstrzymana');
+});
+test('landing keeps buy links while a voucher is on sale',async()=>{
+  const {buys}=await landingList([false,true,false]);
+  assert.ok(buys.every(b=>!b.replacedBy && !b.children));
 });
 
 test('vouchers follow the server sellable flag, including the page voucher',()=>{

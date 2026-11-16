@@ -88,3 +88,4 @@
 .voucher-pricing caption { text-align: left; font: 400 clamp(32px, 5vw, 54px)/1.1 Playfair, Georgia, serif; margin-bottom: 24px; }
 .voucher-pricing th, .voucher-pricing td { padding: 14px 0; text-align: left; border-bottom: 1px solid var(--line); }
 .voucher-pricing th:last-child, .voucher-pricing td:last-child { text-align: right; padding-left: 1em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sales-closed { font-size: 15px; font-style: italic; }

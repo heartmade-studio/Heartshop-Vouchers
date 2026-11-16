@@ -19,6 +19,14 @@ fetch(`${I.api}order.php`, { cache: "no-store" })
     // The built price list is the no-JavaScript fallback. With JavaScript the list shows exactly what the
     // server sells now, the same set as the checkout selector, adding rows a production build left out.
     const list = document.querySelector(".voucher-pricing");
+    const closed = product.type === "voucher" && "sellable" in product && !choices.length;
+    // Sales closed: replace every buy link and "from" price with a notice instead of inviting a refused order.
+    if (closed) document.querySelectorAll("[data-buy]").forEach(el => {
+      const note = document.createElement("span");
+      note.className = "sales-closed";
+      note.textContent = I.t("sales.closedShort");
+      if (el.tagName === "A") el.replaceWith(note); else el.replaceChildren(note); // containers keep their layout
+    });
     if (list && product.type === "voucher" && "sellable" in product) {
       list.hidden = !choices.length;
       const body = list.querySelector("tbody");

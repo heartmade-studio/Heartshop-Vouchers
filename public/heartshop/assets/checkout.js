@@ -412,19 +412,23 @@ async function init() {
   syncBannerOffset();
   const select = $("voucher-offer");
   if (!shipped() && select) {
-    // Nothing on sale (a demo outside the sandbox): show the page's voucher and say so before the form is filled.
     const sellable = I.voucherChoices(cfg.offers, cfg.product);
-    salesClosed = !sellable.length && cfg.product.sellable === false;
+    // A started payment keeps its voucher even after the shop withdraws it: resuming reuses the same order
+    // and payment key, which the server allows for an existing payment.
+    const previous = HeartshopAttempt.offerId();
+    const pending = [cfg.offers?.[previous]].find(o => o?.type === "voucher" && o.path === cfg.product.path);
+    // Nothing on sale and nothing to resume: show the page's voucher and say so before the form is filled.
+    salesClosed = !sellable.length && !pending && cfg.product.sellable === false;
     const choices = sellable.length ? sellable : [cfg.product];
+    if (pending && !choices.some(o => o.id === pending.id)) choices.unshift(pending);
     for (const o of choices) {
       select.add(new Option(pln(o.price) + " · " + o.name, o.id));
     }
     const saved = store.read().offer;
     const url = new URL(location.href);
     const requested = url.searchParams.get("offer");
-    const previous = HeartshopAttempt.offerId();
     const candidates = [previous, !HeartshopAttempt.orderId() && requested, saved];
-    // A new order starts on the page's voucher when it is on sale, otherwise on the first one that is.
+    // A new purchase starts on the page's voucher when it is on sale, otherwise on the first one that is.
     const fallback = choices.some(o => o.id === cfg.product.id) ? cfg.product.id : choices[0].id;
     select.value = candidates.find(id => choices.some(o => o.id === id)) || fallback;
     if (requested !== null) {
