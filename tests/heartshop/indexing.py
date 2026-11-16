@@ -34,7 +34,9 @@ def exercise(get, http, https, web):
                 seller,product=schema['@graph'];offer=product['offers']
                 assert seller['name']=='Synthetic seller & studio' and seller['name'].replace('&','&amp;') in html
                 assert product['name'] in html and product['description'] in html
-                assert offer['price']=='123.45' and offer['priceCurrency']=='PLN'
+                if offer['@type']=='AggregateOffer':assert offer['lowPrice']=='123.45' and offer['offerCount']>1
+                else:assert offer['@type']=='Offer' and offer['price']=='123.45'
+                assert offer['priceCurrency']=='PLN'
                 assert '123,45' in html
                 assert product['@type'] in ['Product','Service']
                 if product['@type']=='Service':assert seller['@type']=='ProfessionalService'
@@ -62,6 +64,12 @@ def exercise(get, http, https, web):
         p.write_text(configured);build(ok=False)
         configured=re.sub(r"'invoice_request_text' => '[^']*'","'invoice_request_text' => 'Fakturę wystawimy na prośbę wysłaną mailem.'",configured)
     p.write_text(configured);build(check=True,ok=False);build();build(check=True);verify(True)
+    if "'masaz-120'" in configured:
+        # Production lists only sellable offers: a demo sample left in config is neither linked nor priced.
+        p.write_text(re.sub(r"('masaz-120' => \[\s*'demo'\s*=> )false",r"\1true",configured));build()
+        landing=(web/'heartshop/index.html').read_text()
+        assert 'offer=masaz-120' not in landing and 'offer=masaz-60' in landing,landing
+        p.write_text(configured);build()
     # Same gross unit price as the actual checkout snapshot; no parallel price list.
     code="require 'public/heartshop/api/lib.php'; $c=cfg(); echo json_encode(makeSnapshot(['qty'=>1,'delivery'=>'kurier'], $c));"
     snapshot=json.loads(subprocess.check_output(['php','-r',code],cwd=repo,text=True))

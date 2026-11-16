@@ -23,9 +23,17 @@ $e = static fn($s) => htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 
 function replaceBlock(string $html, string $label, string $content, string $before): string {
     $block = "<!-- BEGIN $label -->\n$content\n<!-- END $label -->";
     $pattern = '#<!-- BEGIN '.preg_quote($label, '#').' -->.*?<!-- END '.preg_quote($label, '#').' -->#s';
-    return preg_match($pattern, $html) ? preg_replace_callback($pattern, fn() => $block, $html) : str_replace($before, $block."\n".$before, $html);
+    if (preg_match($pattern, $html)) return preg_replace_callback($pattern, fn() => $block, $html);
+    // A template without the marker or its anchor would silently lose the block; stop the build instead.
+    if (!str_contains($html, $before)) throw new RuntimeException("Storefront template needs <!-- BEGIN $label --> or $before");
+    return str_replace($before, $block."\n".$before, $html);
 }
-$choices = array_filter($c['offers'], static fn($v) => $v['type'] === 'voucher' && ($v['path'] ?? '') === ($o['path'] ?? ''));
+// A production-ready shop lists only offers it can actually sell; while it is a demo, the samples stay visible.
+$productionReady = ($c['production_ready'] ?? false) === true;
+$choices = array_filter($c['offers'], static fn($v, $id) => $v['type'] === 'voucher' && ($v['path'] ?? '') === ($o['path'] ?? '')
+    && (!$productionReady || ($v['demo'] ?? true) === false), ARRAY_FILTER_USE_BOTH);
+// Nothing on sale yet: show the page's own voucher; checkout refuses it until it is configured for sale.
+if (!$choices) $choices = [$o['id'] => $o];
 foreach ($choices as $choice) {
     if (!is_int($choice['price']) || $choice['price'] <= 0) throw new RuntimeException('Offer price must be positive integer grosze');
 }
@@ -52,13 +60,18 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/pu
         $head = '';
         if ($enabled) {
             $urls[] = $url;
-            $offer = ['@type'=>'Offer','url'=>$url,'priceCurrency'=>'PLN','price'=>number_format($o['price']/100, 2, '.', '')];
+            $money = static fn(int $g) => number_format($g/100, 2, '.', '');
+            $prices = array_column($choices, 'price');
+            $offer = count($choices) > 1
+                ? ['@type'=>'AggregateOffer','url'=>$url,'priceCurrency'=>'PLN','lowPrice'=>$money(min($prices)),
+                    'highPrice'=>$money(max($prices)),'offerCount'=>count($choices)]
+                : ['@type'=>'Offer','url'=>$url,'priceCurrency'=>'PLN','price'=>$money($o['price'])];
             // Do not invent ratings, availability, discounts, delivery promises or service locations.
             $seller = ['@type'=>$o['type']==='voucher' ? $seo['seller_type'] : 'Organization',
                 '@id'=>$origin.$base.'/#seller','name'=>$c['shop']['seller'],'url'=>$origin.$base.'/'];
             if ($seo['seller_address'] !== '') $seller['address']=$seo['seller_address'];
             $product = ['@type'=>$o['type']==='voucher' ? 'Service' : 'Product','@id'=>$url.'#offer',
-                'name'=>$o['name'],'description'=>$description,'url'=>$url,'offers'=>$offer+['seller'=>['@id'=>$seller['@id']]]];
+                'name'=>$heading,'description'=>$description,'url'=>$url,'offers'=>$offer+['seller'=>['@id'=>$seller['@id']]]];
             if ($o['type']==='voucher') { $product['provider']=['@id'=>$seller['@id']]; $seller['makesOffer']=$offer+['itemOffered'=>['@id'=>$product['@id']]]; }
             $schema = ['@context'=>'https://schema.org','@graph'=>[$seller,$product]];
             $head = '<link rel="canonical" href="'.$e($url).'">'."\n";
@@ -70,16 +83,18 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root.'/pu
         $rows = [];
         foreach ($choices as $id => $choice) {
             $href = ($lang === 'en' ? 'order.html' : 'zamowienie.html').'?offer='.rawurlencode((string)$id);
-            $rows[] = '<tr><td><a href="'.$e($href).'">'.$e($choice['name']).'</a></td>'
+            $name = $lang === 'en' ? ($choice['name_en'] ?? $choice['name']) : $choice['name'];
+            $rows[] = '<tr><td><a href="'.$e($href).'">'.$e($name).'</a></td>'
                 .'<td data-offer-price="'.$e($id).'">'.$e(formatPln($choice['price'])).'</td></tr>';
         }
-        $table = '<section class="voucher-pricing wrap"><table><caption>Wybierz voucher</caption>'
-            .'<thead><tr><th scope="col">Usługa</th><th scope="col">Cena</th></tr></thead><tbody>'
+        [$caption, $service, $priceLabel] = $lang === 'en' ? ['Choose a voucher', 'Service', 'Price'] : ['Wybierz voucher', 'Usługa', 'Cena'];
+        $table = '<section class="voucher-pricing wrap"><table><caption>'.$caption.'</caption>'
+            .'<thead><tr><th scope="col">'.$service.'</th><th scope="col">'.$priceLabel.'</th></tr></thead><tbody>'
             .implode("\n", $rows).'</tbody></table></section>';
         $html = replaceBlock($html, 'VOUCHER PRICES', $table, '<section class="gift-story">');
         $html = replaceBlock($html, 'STOREFRONT METADATA', $head, '</head>');
         $visible = '<section class="wrap" aria-label="'.($lang==='en'?'Offer and seller':'Oferta i sprzedawca').'">'
-            .'<h2>'.$e($o['name']).'</h2><p>'.$e($description).'</p><p>'.$e($c['shop']['seller'])
+            .'<h2>'.$e($heading).'</h2><p>'.$e($description).'</p><p>'.$e($c['shop']['seller'])
             .($seo['seller_address']!=='' ? ' · '.$e($seo['seller_address']) : '').'</p></section>';
         $html = replaceBlock($html, 'STOREFRONT FACTS', $visible, '</main>');
     }

@@ -124,7 +124,9 @@ window.HeartshopI18n = (() => {
     // The offer this page sells (<html data-offer>); null = the shop's default offer.
     offer: html?.dataset?.offer || null,
     page: lang === "en" ? { order: "order.html", thanks: "thank-you.html" } : { order: "zamowienie.html", thanks: "dziekujemy.html" },
-    voucherChoices: (offers, product) => Object.values(offers || {}).filter(o => o.type === "voucher" && o.path === product.path),
+    // The server's `sellable` (the rule checkout enforces) decides what is offered; older answers without it list all.
+    voucherChoices: (offers, product) => Object.values(offers || {}).filter(o => o.type === "voucher"
+      && o.path === product.path && o.sellable !== false),
     money: g => (g / 100).toLocaleString(lang === "en" ? "en-GB" : "pl-PL", { style: "currency", currency: "PLN" }),
     // Server copy (product, delivery) is Polish; English pages replace it when a translation exists.
     local: (key, server) => (lang === "pl" || !has(key) ? server : text[lang][key]),

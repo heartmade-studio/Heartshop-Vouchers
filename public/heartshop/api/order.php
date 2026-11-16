@@ -8,7 +8,7 @@ try {
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $h = paymoveHosts();
         $offers = [];
-        foreach (array_keys($c['offers']) as $id) $offers[$id] = offer($id);
+        foreach (array_keys($c['offers']) as $id) $offers[$id] = offer($id) + ['sellable' => offerSellable(offer($id))];
         jsonOut([
             'offers'           => (object)$offers, // always a JSON object keyed by offer id
             'defaultOffer'     => (string)$c['default_offer'],

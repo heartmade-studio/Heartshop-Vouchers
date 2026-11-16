@@ -448,7 +448,7 @@ test('pricing links preselect only local vouchers and a canceled attempt keeps i
     'masaz-120':{id:'masaz-120',price:40000},
     'other':{id:'other',price:50000,path:'another-store/'},
   };
-  for(const [id,o] of Object.entries(products)) products[id]={type:'voucher',path:'voucher/',max_qty:5,name:id,...o};
+  for(const [id,o] of Object.entries(products)) products[id]={type:'voucher',path:'voucher/',max_qty:5,name:id,demo:false,...o};
   p.context.fetch=async()=>({ok:true,json:async()=>({offers:products})});
   p.context.Option=class {};
   p.element('voucher-offer').add=()=>{};
@@ -468,6 +468,17 @@ test('pricing links preselect only local vouchers and a canceled attempt keeps i
   assert.equal(p.element('voucher-lock-note').hidden,false);
   assert.equal(await open('masaz-60'),'masaz-120');
   assert.equal(await p.context.HeartshopAttempt.begin(p.context.collect()),key);
+});
+
+test('vouchers follow the server sellable flag, including the page voucher',()=>{
+  const p=page('zamowienie.html');
+  const offers={
+    'masaz-60':{id:'masaz-60',type:'voucher',path:'',sellable:false},
+    'masaz-120':{id:'masaz-120',type:'voucher',path:'',sellable:true},
+    'legacy':{id:'legacy',type:'voucher',path:''},
+    'elsewhere':{id:'elsewhere',type:'voucher',path:'x/',sellable:true},
+  };
+  assert.equal(p.context.HeartshopI18n.voucherChoices(offers,offers['masaz-60']).map(o=>o.id).join(),'masaz-120,legacy');
 });
 
 test('voucher checkout ignores invoice data in an older draft without invoice controls',async()=>{

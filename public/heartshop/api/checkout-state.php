@@ -62,7 +62,14 @@ function demoOnly(?string $id = null): never {
 function salesOpen(array $order): bool {
     if (paymoveHosts()['sandbox']) return true;
     if (($order['snapshot']['demo'] ?? false) === true) return false;
-    return !(!(cfg()['production_ready'] ?? false) || (offer($order['offer'] ?? '')['demo'] ?? true) || invoiceTextNeedsApproval(cfg()));
+    return offerSellable(offer($order['offer'] ?? ''));
+}
+
+// Whether a new order for this offer can be paid for now. order.php publishes it, so the price list,
+// "from" price and checkout selector offer exactly what checkout accepts.
+function offerSellable(?array $offer): bool {
+    if (paymoveHosts()['sandbox']) return true;
+    return !(!(cfg()['production_ready'] ?? false) || ($offer['demo'] ?? true) || invoiceTextNeedsApproval(cfg()));
 }
 
 function prepareCheckout(array $input, string $key, ?callable $provider = null, ?int $now = null,

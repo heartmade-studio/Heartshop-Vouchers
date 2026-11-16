@@ -411,7 +411,9 @@ async function init() {
   syncBannerOffset();
   const select = $("voucher-offer");
   if (!shipped() && select) {
-    const choices = I.voucherChoices(cfg.offers, cfg.product);
+    // Nothing on sale (a demo outside the sandbox): keep the page's voucher; the server refuses it as before.
+    const sellable = I.voucherChoices(cfg.offers, cfg.product);
+    const choices = sellable.length ? sellable : [cfg.product];
     for (const o of choices) {
       select.add(new Option(pln(o.price) + " · " + o.name, o.id));
     }
