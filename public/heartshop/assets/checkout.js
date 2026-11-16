@@ -13,6 +13,7 @@ const alertBox = $("form-alert");
 let cfg = null;
 let qty = 1;
 let submitting = false;
+let salesClosed = false; // the server sells none of this page's vouchers now
 let touched = false; // after the first submit attempt, errors update live
 
 function syncBannerOffset() {
@@ -279,13 +280,13 @@ function updateVoucherLock() {
   const select = $("voucher-offer");
   if (!select || shipped()) return;
   const locked = HeartshopAttempt.offerId() === cfg.product.id;
-  select.disabled = submitting || locked;
+  select.disabled = submitting || locked || salesClosed;
   $("voucher-lock-note").hidden = !locked;
 }
 
 function setBusy(on) {
   submitting = on;
-  payBtn.disabled = on;
+  payBtn.disabled = on || salesClosed;
   updateVoucherLock();
   render();
 }
@@ -311,7 +312,7 @@ async function paymentConfirmed(orderId) {
 
 form.addEventListener("submit", async e => {
   e.preventDefault();
-  if (submitting) return;
+  if (submitting || salesClosed) return;
   touched = true;
   showAlert("");
   if (Object.keys(validate()).length) { focusFirstError(); return; }
@@ -411,8 +412,9 @@ async function init() {
   syncBannerOffset();
   const select = $("voucher-offer");
   if (!shipped() && select) {
-    // Nothing on sale (a demo outside the sandbox): keep the page's voucher; the server refuses it as before.
+    // Nothing on sale (a demo outside the sandbox): show the page's voucher and say so before the form is filled.
     const sellable = I.voucherChoices(cfg.offers, cfg.product);
+    salesClosed = !sellable.length && cfg.product.sellable === false;
     const choices = sellable.length ? sellable : [cfg.product];
     for (const o of choices) {
       select.add(new Option(pln(o.price) + " · " + o.name, o.id));
@@ -422,13 +424,20 @@ async function init() {
     const requested = url.searchParams.get("offer");
     const previous = HeartshopAttempt.offerId();
     const candidates = [previous, !HeartshopAttempt.orderId() && requested, saved];
-    select.value = candidates.find(id => choices.some(o => o.id === id)) || cfg.product.id;
+    // A new order starts on the page's voucher when it is on sale, otherwise on the first one that is.
+    const fallback = choices.some(o => o.id === cfg.product.id) ? cfg.product.id : choices[0].id;
+    select.value = candidates.find(id => choices.some(o => o.id === id)) || fallback;
     if (requested !== null) {
       url.searchParams.delete("offer");
       history.replaceState(history.state, "", url);
     }
     cfg.product = cfg.offers[select.value];
     updateVoucherLock();
+    if (salesClosed) {
+      select.disabled = true;
+      payBtn.disabled = true;
+      showAlert(t("sales.closed"));
+    }
     select.addEventListener("change", () => {
       cfg.product = cfg.offers[select.value];
       qty = Math.min(qty, cfg.product.max_qty);
