@@ -123,7 +123,8 @@ function db(): SQLite3 {
         while ($col=$res->fetchArray(SQLITE3_ASSOC)) $cols[]=$col['name'];
         foreach (['tracking_number TEXT','courier_service TEXT','tracking_at INTEGER',
             'idempotency_key TEXT','request_hash TEXT','payment_state TEXT','payment_url TEXT',
-            'payment_attempt_at INTEGER','payment_error TEXT',
+            'payment_attempt_at INTEGER','payment_error TEXT','payment_link_served_at INTEGER',
+            'status_check_after INTEGER NOT NULL DEFAULT 0',
             // NULL offer_type = an order from before typed offers, i.e. shipping.
             'offer_type TEXT','note TEXT','done_at INTEGER','invoice_done_at INTEGER'] as $def) {
             if (!in_array(strtok($def,' '),$cols,true)) $conn->exec("ALTER TABLE orders ADD COLUMN $def");

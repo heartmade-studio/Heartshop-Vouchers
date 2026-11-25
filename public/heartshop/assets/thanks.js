@@ -27,7 +27,7 @@ function show(state, o = {}) {
   const badge = $("badge");
   $("action").textContent = homeAction.text;
   $("action").href = homeAction.href;
-  $("action").hidden = state === "review" || state === "slow";
+  $("action").hidden = ["review", "slow", "confirming"].includes(state);
   if (state === "paid") {
     badge.className = "badge-mark";
     badge.textContent = "✓";
@@ -41,6 +41,11 @@ function show(state, o = {}) {
     }
     try { sessionStorage.removeItem(`heartshop-draft:${I.scope}`); } catch {}
     try { HeartshopAttempt.clearFor(id); } catch {} // the next purchase is a new attempt
+  } else if (state === "confirming") {
+    badge.className = "badge-mark wait";
+    badge.textContent = "…";
+    $("title").textContent = t("thanks.confirming.title");
+    $("text").textContent = t(o.type === "voucher" ? "thanks.confirming.voucher" : "thanks.confirming.text");
   } else if (state === "review") {
     badge.className = "badge-mark wait";
     badge.textContent = "!";
@@ -93,16 +98,16 @@ async function poll() {
       setTimeout(poll, 10000);
       return;
     }
-    if (o.status === "canceled") {
+    if (o.status === "confirming" || o.status === "canceled") {
       // A resumed checkout keeps the original order. A late successful webhook
       // must still replace the earlier cancellation on this page.
-      show("canceled", o);
+      show(o.status === "canceled" && !o.resumeAvailable ? "slow" : o.status, o);
       setTimeout(poll, slow ? 10000 : 2000);
       return;
     }
     if (o.status === "paid" || o.status === "review" || o.status === "unknown") return show(o.status, o);
   } catch {}
-  if (slow) show("slow");
+  show("slow");
   setTimeout(poll, slow ? 10000 : 2000);
 }
 // The language switch keeps the order id, so the other language shows the same order.

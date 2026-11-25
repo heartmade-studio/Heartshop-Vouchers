@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import sqlite3
 import subprocess
 import tempfile
 import time
@@ -34,11 +35,32 @@ $db=db();$db->exec("UPDATE orders SET data=json_set(data, '$.snapshot.demo', jso
 echo json_encode(['input'=>$input,'result'=>$result,'voucher'=>$voucher]);
 ''')
     seeded = json.loads(subprocess.check_output(['php', str(fixture), str(ROOT)], env=env))
+    # Substitute only the provider status lookup in the PHP route. The web
+    # server also disables outbound cURL so a broken fixture cannot call PAYMOVE.
+    provider_state = private/'provider.json'
+    provider_reads = private/'provider-reads'
+    provider_state.write_text(json.dumps({'status': 'CANCELED', 'orderId': 'fixture-failed'}))
+    prepend = private/'provider.php'
+    prepend.write_text("""<?php
+$statusLookup=function(string $url): array {
+    file_put_contents(__DIR__.'/provider-reads',$url.PHP_EOL,FILE_APPEND);
+    return json_decode(file_get_contents(__DIR__.'/provider.json'),true,flags:JSON_THROW_ON_ERROR);
+};
+""")
+    def next_observation(order_id, status):
+        provider_state.write_text(json.dumps({'status': status, 'orderId': 'fixture-voucher' if order_id == seeded['voucher']['orderId'] else 'fixture-pm'}))
+        with sqlite3.connect(private/'orders.sqlite') as db:
+            db.execute('UPDATE orders SET status_check_after=0 WHERE external_id=?', (order_id,))
+
+    def check():
+        return subprocess.run(['php', str(ROOT/'scripts/heartshop/retry-mail.php'), '--check',
+                               str(ROOT/'public/heartshop/api/lib.php')], env=env, capture_output=True, text=True)
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
     with (private/'php.log').open('w') as log:
-        proc = subprocess.Popen(['php', '-d', 'sendmail_path=/usr/bin/false', '-S', f'127.0.0.1:{port}', '-t', str(ROOT/'public')], env=env, stdout=log, stderr=log)
+        proc = subprocess.Popen(['php', '-d', 'sendmail_path=/usr/bin/false', '-d', 'disable_functions=curl_exec',
+                                 '-d', f'auto_prepend_file={prepend}', '-S', f'127.0.0.1:{port}', '-t', str(ROOT/'public')], env=env, stdout=log, stderr=log)
         def request(path, data=None, headers=None):
             req = urllib.request.Request(f'http://127.0.0.1:{port}/heartshop/api/{path}', data=data, headers=headers or {})
             try:
@@ -48,7 +70,7 @@ echo json_encode(['input'=>$input,'result'=>$result,'voucher'=>$voucher]);
             with response:
                 return response.status, json.loads(response.read()), response.headers
         def event(status, price, order=None, provider='fixture-pm', secret=b'synthetic-signing-only', **fields):
-            raw = json.dumps({'externalId': order or seeded['result']['orderId'], 'status': status, 'price': price, 'orderId': provider, **fields}).encode()
+            raw = json.dumps({'externalId': seeded['result']['orderId'] if order is None else order, 'status': status, 'price': price, 'orderId': provider, **fields}).encode()
             stamp = str(int(time.time()))
             signature = base64.b64encode(hmac.new(secret, stamp.encode()+b'.'+raw, hashlib.sha256).digest()).decode()
             return request('webhook.php', raw, {'X-Paymove-Signature': f't={stamp},v1={signature}'})
@@ -76,15 +98,9 @@ echo json_encode(['input'=>$input,'result'=>$result,'voucher'=>$voucher]);
             assert request('webhook.php', b'{}')[0] == 401
             assert event('ERROR', 0, provider='fixture-failed')[1]['status'] == 'canceled'
             assert request('status.php?o='+seeded['result']['orderId'])[1]['status'] == 'canceled'
-            # Model the unsigned PENDING observation from resuming that same purchase.
-            hint = private/'hint.php'
-            hint.write_text('''<?php
-$_SERVER['DOCUMENT_ROOT']=$argv[1];require $argv[1].'/public/heartshop/api/lib.php';
-$s=db()->prepare('UPDATE orders SET data=json_set(data,"$.payment_observation",json(:hint)) WHERE external_id=:id');
-$s->bindValue(':hint',json_encode(['status'=>'PENDING','order_id'=>'fixture-pm']));$s->bindValue(':id',$argv[2]);$s->execute();
-''')
-            subprocess.check_call(['php',str(hint),str(ROOT),seeded['result']['orderId']],env=env)
-            assert request('status.php?o='+seeded['result']['orderId'])[1]['status'] == 'pending'
+            next_observation(seeded['result']['orderId'], 'PENDING')
+            canceled = request('status.php?o='+seeded['result']['orderId'])[1]
+            assert canceled['status'] == 'confirming' and canceled['resumeAvailable'] is False
             # A new signed provider transaction ID for the same failed purchase is valid.
             assert event('COMPLETED', seeded['result']['total'])[1]['status'] == 'paid'
             assert event('COMPLETED', seeded['result']['total'])[1]['changed'] is False
@@ -92,9 +108,38 @@ $s->bindValue(':hint',json_encode(['status'=>'PENDING','order_id'=>'fixture-pm']
             assert request('order.php', payload, headers)[1]['status'] == 'paid'
             voucher = seeded['voucher']['orderId']
             assert request(f'status.php?o={voucher}')[1].get('vouchers') is None  # no codes before payment
-            transaction = dict(secret=b'synthetic-transaction', currency='PLN', amountMinor=str(seeded['voucher']['total']))
+            transaction = dict(secret=b'synthetic-transaction', provider='fixture-voucher', currency='PLN', amountMinor=str(seeded['voucher']['total']))
+            for state in ['INITIALIZED', 'ERROR', 'CANCELED', 'PENDING', 'WAITING_FOR_EXTERNAL_ACTION', 'COMPLETED', 'REFUNDED']:
+                next_observation(voucher, state)
+                reads_before = len(provider_reads.read_text().splitlines())
+                observed = request(f'status.php?o={voucher}')[1]
+                confirming = state in ('PENDING', 'WAITING_FOR_EXTERNAL_ACTION', 'COMPLETED')
+                assert observed['status'] == ('confirming' if confirming else 'pending'), state
+                assert observed['resumeAvailable'] == (state in ('INITIALIZED', 'ERROR', 'CANCELED')), state
+                assert 'vouchers' not in observed and 'buyerEmail' not in observed
+                assert request(f'status.php?o={voucher}')[1] == observed
+                reads = provider_reads.read_text().splitlines()
+                assert len(reads) == reads_before + 1 and reads[-1] == seeded['voucher']['redirectUrl']
+            # A signed event without a merchant ID makes this order a candidate.
+            assert event('COMPLETED', 0, '', type='PAYMENT', **transaction)[1]['status'] == 'received'
+            healthy = check()
+            assert healthy.returncode == 0 and healthy.stdout == ''
+            with sqlite3.connect(private/'orders.sqlite') as db:
+                db.execute('UPDATE orders SET created_at=unixepoch()-960 WHERE external_id=?', (voucher,))
+            stuck = check()
+            assert stuck.returncode == 1 and stuck.stdout == f"{observed['number']} pending 16 min\n", stuck
+            with sqlite3.connect(private/'orders.sqlite') as db:
+                assert db.execute('SELECT count(*) FROM vouchers').fetchone()[0] == 0
+                receipt = db.execute('SELECT received_at FROM signed_completions WHERE provider_id=?', ('fixture-voucher',)).fetchone()[0]
+                db.execute('UPDATE signed_completions SET received_at=? WHERE provider_id=?', (receipt-86401, 'fixture-voucher'))
+            expired = check()
+            assert expired.returncode == 0 and expired.stdout == ''
+            with sqlite3.connect(private/'orders.sqlite') as db:
+                db.execute('UPDATE signed_completions SET received_at=? WHERE provider_id=?', (receipt, 'fixture-voucher'))
             assert event('COMPLETED', 0, voucher, type='REFUND', **transaction)[1]['status'] == 'ignored'
             assert request(f'status.php?o={voucher}')[1].get('vouchers') is None
+            next_observation(voucher, 'COMPLETED')
+            assert request(f'status.php?o={voucher}')[1]['status'] == 'paid'
             assert event('COMPLETED', 0, voucher, type='PAYMENT', **transaction)[1]['status'] == 'paid'
             assert event('COMPLETED', seeded['voucher']['total'], voucher)[1]['changed'] is False
             code, status, _ = request(f'status.php?o={voucher}')
@@ -133,7 +178,6 @@ $s->bindValue(':hint',json_encode(['status'=>'PENDING','order_id'=>'fixture-pm']
                 assert csv.headers['Content-Type'].startswith('text/csv') and voucher_code in text and 'buyer@example.invalid' in text
             assert request('panel.php?action=logout', b'{}', session)[0] == 200
             assert request('panel.php?action=orders', headers=session)[0] == 401
-            check = lambda: subprocess.run(['php', str(ROOT/'scripts/heartshop/retry-mail.php'), '--check', str(ROOT/'public/heartshop/api/lib.php')], env=env, capture_output=True, text=True)
             fresh = check()
             assert fresh.returncode == 0 and fresh.stdout == '', fresh
             subprocess.run(['php', '-r', '$db=new SQLite3($argv[1]);$db->exec("UPDATE mail_outbox SET created_at=created_at-1000");', str(private/'orders.sqlite')], check=True)

@@ -11,6 +11,11 @@ $path=rawurldecode(parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH) ?: '/');
 header('Cache-Control: no-store');header('Referrer-Policy: no-referrer');header('X-Content-Type-Options: nosniff');
 if ($path==='/') { header('Location: /heartshop/');exit; }
 if ($path==='/__dev/paymove.js') { header('Content-Type: application/javascript');readfile(__DIR__.'/paymove.js');exit; }
+$statusLookup=function(string $url): array {
+    if (!preg_match('#^https://checkout\.sandbox\.paymove\.io/local/(hs_[a-f0-9]{24})$#D',$url,$m)) throw new PaymoveFailure('status_url');
+    $order=findOrder($m[1]) ?? throw new PaymoveFailure('status_url');
+    return ['status'=>['paid'=>'COMPLETED','review'=>'COMPLETED','canceled'=>'CANCELED'][$order['status']] ?? 'INITIALIZED','orderId'=>null];
+};
 if ($path==='/__dev/settle' || ($path==='/heartshop/api/order.php')) {
     require $web.'/heartshop/api/lib.php';
     try {
@@ -33,14 +38,7 @@ if ($path==='/__dev/settle' || ($path==='/heartshop/api/order.php')) {
                 'price'=>$order['total'],'status'=>($in['cancel']??false)?'CANCELED':'COMPLETED','paymentMethod'=>'LOCAL_SIMULATION']));
         }
         if (($in['delivery']??'')==='paczkomat') jsonOut(['error'=>'Use courier in the offline simulation'],422);
-        // A resumed checkout reads the provider status first. Report what PAYMOVE would
-        // for the simulated link, so cancel -> retry -> pay keeps the same order.
-        $localStatus=function(string $url): array {
-            if (!preg_match('#^https://checkout\.sandbox\.paymove\.io/local/(hs_[a-f0-9]{24})$#D',$url,$m)) throw new PaymoveFailure('status_url');
-            $order=findOrder($m[1]) ?? throw new PaymoveFailure('status_url');
-            return ['status'=>['paid'=>'COMPLETED','review'=>'COMPLETED','canceled'=>'CANCELED'][$order['status']] ?? 'INITIALIZED','orderId'=>null];
-        };
-        jsonOut(prepareCheckout($in,$_SERVER['HTTP_IDEMPOTENCY_KEY']??'',fn($id)=>'https://checkout.sandbox.paymove.io/local/'.$id,null,$localStatus));
+        jsonOut(prepareCheckout($in,$_SERVER['HTTP_IDEMPOTENCY_KEY']??'',fn($id)=>'https://checkout.sandbox.paymove.io/local/'.$id,null,$statusLookup));
     } catch(CheckoutProblem $e) {
         jsonOut(['error'=>$e->getMessage(),'code'=>$e->reason,'orderId'=>$e->orderId,'errors'=>$e->errors],$e->httpStatus);
     } catch(Throwable $e) { logError($e,'local_simulation');jsonOut(['error'=>'Local simulation failed'],500); }

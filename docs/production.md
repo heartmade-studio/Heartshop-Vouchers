@@ -60,9 +60,17 @@ php scripts/heartshop/retry-mail.php --send /ABS/Heartshop-Vouchers/public/heart
 php scripts/heartshop/retry-mail.php --check /ABS/Heartshop-Vouchers/public/heartshop/api/lib.php
 ```
 
-After testing the configured mail transport, schedule `--send` once per minute under the same OS user as PHP. `--check` reports stalled mail; arrange external monitoring of its exit status/output and the transport. `--status` does not send but may initialize the database. No cron is installed by this project.
+After testing the configured mail transport, schedule `--send` once per minute under the same OS user as PHP. It also retries signed payment matches. Monitor `--check` for stalled mail and pending orders older than 15 minutes with an unmatched signed completion in their window. For payments it prints each candidate’s order number and age. Several orders can share a window, so an alert alone cannot identify which buyer paid. `--status` does not send but may initialize the database. No cron is installed by this project.
 
 Back up SQLite using its backup API/CLI `.backup`, including a tested restore; do not copy a live WAL database file alone. Store backups outside the web root, restrict access and set retention. Protect host access/error logs because order URLs are bearer links. For updates, use an atomic release or pause checkout while replacing a mutually compatible PHP/JS release. Never overwrite newly accepted orders during rollback.
+
+## Payment reconciliation
+
+Use a TRANSACTION webhook with its own signing secret. PAYMOVE has deprecated PAYMENT webhooks. When retiring one, first verify the replacement subscription, then PATCH the old webhook’s endpoint to a controlled HTTPS receiver that acknowledges and discards deliveries. The API offers GET/PATCH on `/webhook/{id}` and POST for assignment. It has no delete or unassign operation.
+
+A TRANSACTION completion can arrive with an empty `externalId`. Heartshop retains the signed event and checks the transaction ID returned for each candidate’s stored checkout URL. The order’s latest link delivery (or creation for older records) and the signed receipt must both fall in the 24-hour recovery window. Checkout resumes extend the order window when they return the payment link.
+
+For a stuck or expired candidate, open the order by its number in the shop panel. In the same PAYMOVE environment and product, reconcile the transaction ID from the stored checkout link’s status with the signed completion, gross PLN amount and order total. Check for an existing voucher or fulfillment before acting. If the match is verified outside the window, use the merchant’s reviewed manual fulfillment procedure and record the resolution. Keep ambiguous cases pending and contact PAYMOVE with the transaction reference. Never ask the buyer to pay again to resolve a missing confirmation.
 
 ## Acceptance before real selling
 
