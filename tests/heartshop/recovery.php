@@ -45,7 +45,15 @@ try {
     expect(db()->querySingle('SELECT COUNT(*) FROM orders')===1,'one local order');
     expect(findOrder($id)['payment_error']===null,'successful recovery clears diagnosis');
 
+    $check=['checkVoucherOrder'=>$id];
+    foreach (['INITIALIZED','CANCELED','ERROR'] as $status) {
+        expect(prepareCheckout($check,$key,$provider,$now+4,fn()=>$status)===['orderId'=>$id,'status'=>'editable'],
+            'changed voucher can start a new order after '.$status);
+    }
+    held(fn()=>prepareCheckout($check,str_repeat('f',32),$provider,$now+4,$ready),'attempt_conflict');
     foreach (['PENDING','WAITING_FOR_EXTERNAL_ACTION','COMPLETED'] as $status) {
+        expect(prepareCheckout($check,$key,$provider,$now+5,fn()=>$status)===['orderId'=>$id,'status'=>'processing'],
+            'changed voucher blocked while '.$status);
         $r=prepareCheckout($input,$key,$provider,$now+5,fn()=>$status);
         expect($r===['orderId'=>$id,'status'=>'processing'],'no pay link while '.$status);
     }

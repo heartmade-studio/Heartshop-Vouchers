@@ -461,7 +461,7 @@ async function voucherCheckout(store=storage()) {
   p.element('terms').checked=true;
   return p;
 }
-test('pricing links preselect only local vouchers and a canceled attempt keeps its voucher on reload',async()=>{
+test('pricing links can change a bound voucher and an unchanged selection keeps its payment key',async()=>{
   const p=await voucherCheckout();
   const products={
     'masaz-60':{id:'masaz-60',price:25000},
@@ -484,9 +484,10 @@ test('pricing links preselect only local vouchers and a canceled attempt keeps i
   const key=await p.context.HeartshopAttempt.begin(p.context.collect());
   p.context.HeartshopAttempt.remember(key,orderA);
   p.context.setBusy(false);
-  assert.equal(p.element('voucher-offer').disabled,true);
-  assert.equal(p.element('voucher-lock-note').hidden,false);
-  assert.equal(await open('masaz-60'),'masaz-120');
+  assert.equal(p.element('voucher-offer').disabled,false);
+  assert.equal(p.element('voucher-lock-note').hidden,true);
+  assert.equal(await open('masaz-60'),'masaz-60');
+  assert.equal(await open('masaz-120'),'masaz-120');
   assert.equal(await p.context.HeartshopAttempt.begin(p.context.collect()),key);
 });
 
@@ -502,6 +503,48 @@ async function openVoucherCheckout(offers,search='',store=storage()) {
   await p.context.init();
   return {p,posts};
 }
+test('closing the voucher modal allows edits; a changed cart checks the first payment before starting another',async()=>{
+  for (const status of ['editable','processing','paid','review','unknown']) {
+    const {p}=await openVoucherCheckout({'masaz-60':{price:25000},'masaz-120':{price:40000}});
+    const requests=[];
+    let callbacks;
+    p.context.setTimeout=fn=>fn();
+    p.context.Paymove={openCheckout:(_url,c)=>{callbacks=c;}};
+    vm.runInContext('sdk=Promise.resolve(Paymove)',p.context);
+    p.context.fetch=async(url,options)=>{
+      if (url.includes('status.php')) return {ok:true,json:async()=>({status:'pending'})};
+      const body=JSON.parse(options.body);
+      const key=options.headers['Idempotency-Key'];
+      requests.push({key,body});
+      const result=body.checkVoucherOrder ? {orderId:orderA,status}
+        : {orderId:requests.length===1?orderA:orderB,redirectUrl:'https://checkout.example.invalid/test'};
+      return {ok:true,status:200,json:async()=>result};
+    };
+    const submit=()=>p.element('order').handlers.submit({preventDefault(){}});
+    await submit();
+    const checking=callbacks.onCancel();
+    assert.equal(p.element('voucher-offer').disabled,false);
+    assert.equal(p.element('qty-plus').disabled,false);
+    p.element('voucher-offer').value='masaz-120';
+    p.element('voucher-offer').handlers.change();
+    p.element('qty-plus').handlers.click();
+    assert.equal(p.element('t-total').textContent,p.context.HeartshopI18n.money(80000));
+    await checking;
+    await submit();
+    assert.deepEqual(requests[1],{key:requests[0].key,body:{checkVoucherOrder:orderA}});
+    if (status==='editable') {
+      assert.equal(requests.length,3);
+      assert.notEqual(requests[2].key,requests[0].key);
+      assert.equal(requests[2].body.offer,'masaz-120');
+      assert.equal(requests[2].body.qty,2);
+      assert.equal(requests[2].body.recipient,'Ania');
+    } else {
+      assert.equal(requests.length,2);
+      assert.equal(p.context.HeartshopAttempt.orderId(),orderA);
+      assert.deepEqual(p.redirects,status==='unknown'?[]:['dziekujemy.html?o='+orderA]);
+    }
+  }
+});
 test('a generic "buy" link opens on the first voucher on sale when the page voucher is not',async()=>{
   const {p}=await openVoucherCheckout({'masaz-60':{price:25000,sellable:false},'masaz-120':{price:40000,sellable:true}});
   assert.equal(p.element('voucher-offer').value,'masaz-120');
@@ -518,7 +561,7 @@ test('a started payment keeps its withdrawn voucher and resumes with the same ke
   // The shop withdraws the 400 zł voucher, then the buyer reopens checkout.
   const {p}=await openVoucherCheckout({'masaz-60':{price:25000,sellable:true},'masaz-120':{price:40000,sellable:false}},'',store);
   assert.equal(p.element('voucher-offer').value,'masaz-120');
-  assert.equal(p.element('voucher-offer').disabled,true);
+  assert.equal(p.element('voucher-offer').disabled,false);
   assert.equal(p.element('pay').disabled,false);
   assert.equal(JSON.parse(store.getItem('heartshop-draft:/heartshop/voucher/')).offer,'masaz-120');
   assert.equal(await p.context.HeartshopAttempt.begin(p.context.collect()),key);
