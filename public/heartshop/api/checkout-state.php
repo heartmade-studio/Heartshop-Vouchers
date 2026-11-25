@@ -76,6 +76,17 @@ function prepareCheckout(array $input, string $key, ?callable $provider = null, 
     ?callable $statusCheck = null): array {
     $now ??= time();
     if (!preg_match('/^[a-f0-9]{32}$/D',$key)) throw new CheckoutProblem(400,'invalid_key','Nieprawidłowy identyfikator próby.');
+    if (array_keys($input) === ['checkVoucherOrder']) {
+        // A changed cart may replace an unopened payment, but never one already processing.
+        $id = $input['checkVoucherOrder'];
+        $order = validOrderId($id) ? findOrder($id) : null;
+        if (!$order || orderType($order['data']) !== 'voucher' || !hash_equals((string)$order['idempotency_key'], $key)) {
+            throw new CheckoutProblem(409, 'attempt_conflict', 'Nie można sprawdzić poprzedniego zamówienia.');
+        }
+        if (($order['data']['snapshot']['payment_scope'] ?? null) !== paymentScope()) checkoutNeedsReview($id);
+        $result = checkoutResult($order, $statusCheck, true, $now);
+        return ['orderId'=>$id, 'status'=>$result['status'] ?? 'editable'];
+    }
     $fingerprint=requestFingerprint($input);
     $prior=findAttempt($key,$fingerprint);
     if ($prior !== null) return resumeCheckout($prior,$provider,$now,$statusCheck);

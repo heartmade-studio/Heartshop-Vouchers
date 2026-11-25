@@ -16,7 +16,7 @@ window.HeartshopAttempt = (() => {
       const id = stored()?.orderId;
       return orderPattern.test(id || '') ? id : null;
     },
-    async begin(payload) {
+    async begin(payload, checkPrevious) {
       const fingerprint = hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload)))));
       const raw = sessionStorage.getItem(key); // Fail closed if storage is unavailable.
       if (raw !== null) {
@@ -24,10 +24,12 @@ window.HeartshopAttempt = (() => {
         if (!/^[a-f0-9]{32}$/.test(attempt?.key) || !/^[a-f0-9]{64}$/.test(attempt?.fingerprint)) {
           throw new Error(t('attempt.unreadable'));
         }
-        if (attempt.fingerprint !== fingerprint) {
+        if (attempt.fingerprint === fingerprint) return attempt.key;
+        if (!checkPrevious || !attempt.offer || !orderPattern.test(attempt.orderId || '')) {
           throw new Error(t(payload.recipient !== undefined ? 'attempt.voucherChanged' : 'attempt.changed'));
         }
-        return attempt.key;
+        if (!await checkPrevious(attempt)) return null;
+        if (sessionStorage.getItem(key) !== raw) throw new Error(t('alert.uncertain'));
       }
       const attempt = { key: hex(crypto.getRandomValues(new Uint8Array(16))), fingerprint };
       if (payload.offer) attempt.offer = payload.offer;

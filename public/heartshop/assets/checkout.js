@@ -13,6 +13,7 @@ const alertBox = $("form-alert");
 let cfg = null;
 let qty = 1;
 let submitting = false;
+let editingWhileChecking = false;
 let salesClosed = false; // the server sells none of this page's vouchers now
 let touched = false; // after the first submit attempt, errors update live
 
@@ -45,8 +46,9 @@ function quote() {
 function render() {
   const q = quote();
   $("qty").textContent = qty;
-  $("qty-minus").disabled = qty <= 1;
-  $("qty-plus").disabled = qty >= cfg.product.max_qty;
+  const locked = salesClosed || (submitting && !editingWhileChecking) || voucherAttemptLocked();
+  $("qty-minus").disabled = locked || qty <= 1;
+  $("qty-plus").disabled = locked || qty >= cfg.product.max_qty;
   $("t-items").textContent = pln(q.items);
   $("t-total").textContent = pln(q.total);
   payBtn.textContent = submitting ? t("pay.busy") : t("pay.label", { total: pln(q.total) });
@@ -276,16 +278,21 @@ function checkoutUrl(redirectUrl) {
   return `https://checkout.sandbox.paymove.io/${match[1]}?externalId=${match[2]}`;
 }
 
+function voucherAttemptLocked() {
+  return !shipped() && HeartshopAttempt.offerId() === cfg.product.id && !HeartshopAttempt.orderId();
+}
+
 function updateVoucherLock() {
   const select = $("voucher-offer");
   if (!select || shipped()) return;
-  const locked = HeartshopAttempt.offerId() === cfg.product.id;
-  select.disabled = submitting || locked || salesClosed;
+  const locked = voucherAttemptLocked();
+  select.disabled = (submitting && !editingWhileChecking) || locked || salesClosed;
   $("voucher-lock-note").hidden = !locked;
 }
 
 function setBusy(on) {
   submitting = on;
+  editingWhileChecking = false;
   payBtn.disabled = on || salesClosed;
   updateVoucherLock();
   render();
@@ -310,6 +317,23 @@ async function paymentConfirmed(orderId) {
   return false;
 }
 
+async function checkPreviousVoucher(attempt) {
+  const response = await fetch(`${I.api}order.php`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": attempt.key },
+    body: JSON.stringify({ checkVoucherOrder: attempt.orderId }),
+  });
+  const result = await response.json();
+  if (response.ok && result.orderId === attempt.orderId) {
+    if (result.status === "editable") return true;
+    if (["paid", "review", "processing"].includes(result.status)) {
+      location.assign(`${I.page.thanks}?o=${encodeURIComponent(attempt.orderId)}`);
+      return false;
+    }
+  }
+  throw new Error((result.error && I.serverError(result)) || t("alert.uncertain"));
+}
+
 form.addEventListener("submit", async e => {
   e.preventDefault();
   if (submitting || salesClosed) return;
@@ -320,18 +344,15 @@ form.addEventListener("submit", async e => {
   setBusy(true);
   try {
     const payload = collect();
-    const send = async () => {
-      const attemptKey = await HeartshopAttempt.begin(payload);
-      const res = await fetch(`${I.api}order.php`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": attemptKey },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json().catch(() => ({}));
-      HeartshopAttempt.remember(attemptKey, body.orderId);
-      return [res, body];
-    };
-    const [res, body] = await send();
+    const attemptKey = await HeartshopAttempt.begin(payload, shipped() ? null : checkPreviousVoucher);
+    if (!attemptKey) return;
+    const res = await fetch(`${I.api}order.php`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": attemptKey },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    HeartshopAttempt.remember(attemptKey, body.orderId);
     if (res.status === 422 && body.errors) {
       HeartshopAttempt.clear(); // Validation rejected before an order/payment was created.
       showErrors(I.fieldErrors(body.errors)); focusFirstError(); setBusy(false); return;
@@ -355,10 +376,13 @@ form.addEventListener("submit", async e => {
       onComplete: () => location.assign(thanks),
       onCancel: async () => {
         if (paid) { location.assign(thanks); return; }
+        editingWhileChecking = !shipped();
+        updateVoucherLock();
+        render();
         showAlert(t("alert.checking"), true);
         if (await paymentConfirmed(body.orderId)) { store.clear(); location.assign(thanks); return; }
         setBusy(false);
-        showAlert(t("alert.closed"), true);
+        showAlert(t(shipped() ? "alert.closed" : "alert.voucherClosed"), true);
       },
       onError: async () => {
         if (await paymentConfirmed(body.orderId)) { store.clear(); location.assign(thanks); return; }
@@ -419,7 +443,7 @@ async function init() {
     const pending = [cfg.offers?.[previous]].find(o => o?.type === "voucher" && o.path === cfg.product.path);
     // Nothing on sale and nothing to resume: show the page's voucher and say so before the form is filled.
     salesClosed = !sellable.length && !pending && cfg.product.sellable === false;
-    const choices = sellable.length ? sellable : [cfg.product];
+    const choices = sellable.length || pending ? sellable : [cfg.product];
     if (pending && !choices.some(o => o.id === pending.id)) choices.unshift(pending);
     for (const o of choices) {
       select.add(new Option(pln(o.price) + " · " + o.name, o.id));
@@ -427,7 +451,7 @@ async function init() {
     const saved = store.read().offer;
     const url = new URL(location.href);
     const requested = url.searchParams.get("offer");
-    const candidates = [previous, !HeartshopAttempt.orderId() && requested, saved];
+    const candidates = previous && !HeartshopAttempt.orderId() ? [previous] : [requested, saved, previous];
     // A new purchase starts on the page's voucher when it is on sale, otherwise on the first one that is.
     const fallback = choices.some(o => o.id === cfg.product.id) ? cfg.product.id : choices[0].id;
     select.value = candidates.find(id => choices.some(o => o.id === id)) || fallback;
