@@ -11,6 +11,8 @@
 - [Signature](https://docs.paymove.io/en/webhook-signature): `X-Paymove-Signature`, HMAC-SHA256 of timestamp + `.` + raw body, base64 signature, checked within five minutes.
 - Webhook URL: `https://YOUR-HOST/heartshop/api/webhook.php`. Expected response is 200; configure retries. Do not fulfill based on the return URL or browser callback.
 
+For a TRANSACTION subscription, set `PAYMOVE_TRANSACTION_SECRET` to that webhook's own signing secret. Send the default payload or include `type`, `externalId`, `orderId`, `status`, `currency`, `amountMinor` and `paymentMethod` in the template. The shop matches the gross PLN amount and ignores refund notifications. The legacy PAYMENT subscription can remain active with its separate secret during migration.
+
 The initial provider identity binding comes from the first verified signed `COMPLETED` webhook, because the create response does not contain provider `orderId`. Conflicts and amount mismatches become `review`. Automatic refunds are not implemented.
 
 ### Payment recovery

@@ -2,11 +2,15 @@
 declare(strict_types=1);
 require __DIR__ . '/lib.php';
 
-// Thank-you page polls this. Read-only: the webhook is the source of truth.
+// Thank-you page polls this. Fulfillment always requires a signed completion.
 try {
     $id = $_GET['o'] ?? null;
     $order = validOrderId($id) ? findOrder($id) : null;
     if (!$order) jsonOut(['status' => 'unknown'], 404);
+    if (in_array($order['status'],['pending','canceled'],true)) {
+        try { checkSignedCompletion($id); $order=findOrder($id); }
+        catch (Throwable $e) { logError($e,'confirmation_check'); }
+    }
     $d = $order['data'];
     $out = [
         // An unsigned observation can only hide an old cancellation while we

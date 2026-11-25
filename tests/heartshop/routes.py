@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-http-', dir=scratch) as tmp:
     envfile = private/'.env'
     panel_hash = subprocess.check_output(['php', str(ROOT/'scripts/heartshop/panel-password.php')], input=b'synthetic-panel-pass\n').decode().strip()
     assert panel_hash.startswith('PANEL_PASSWORD_HASH=$')
-    envfile.write_text('PAYMOVE_API_KEY=synthetic-only\nPAYMOVE_PRODUCT_ID=fixture\nPAYMOVE_WEBHOOK_SECRET=synthetic-signing-only\nMAIL_FROM=shop@example.invalid\nMERCHANT_EMAIL=merchant@example.invalid\nSHOP_ORIGIN=https://staging.shop.example.com\nFURGONETKA_TOKEN='+'f'*32+'\n'+panel_hash+'\n')
+    envfile.write_text('PAYMOVE_API_KEY=synthetic-only\nPAYMOVE_PRODUCT_ID=fixture\nPAYMOVE_WEBHOOK_SECRET=synthetic-signing-only\nPAYMOVE_TRANSACTION_SECRET=synthetic-transaction\nMAIL_FROM=shop@example.invalid\nMERCHANT_EMAIL=merchant@example.invalid\nSHOP_ORIGIN=https://staging.shop.example.com\nFURGONETKA_TOKEN='+'f'*32+'\n'+panel_hash+'\n')
     envfile.chmod(0o600)
     env = dict(os.environ, HEARTSHOP_ENV_FILE=str(envfile))
     fixture = private/'seed.php'
@@ -47,10 +47,10 @@ echo json_encode(['input'=>$input,'result'=>$result,'voucher'=>$voucher]);
                 response = e
             with response:
                 return response.status, json.loads(response.read()), response.headers
-        def event(status, price, order=None, provider='fixture-pm'):
-            raw = json.dumps({'externalId': order or seeded['result']['orderId'], 'status': status, 'price': price, 'orderId': provider}).encode()
+        def event(status, price, order=None, provider='fixture-pm', secret=b'synthetic-signing-only', **fields):
+            raw = json.dumps({'externalId': order or seeded['result']['orderId'], 'status': status, 'price': price, 'orderId': provider, **fields}).encode()
             stamp = str(int(time.time()))
-            signature = base64.b64encode(hmac.new(b'synthetic-signing-only', stamp.encode()+b'.'+raw, hashlib.sha256).digest()).decode()
+            signature = base64.b64encode(hmac.new(secret, stamp.encode()+b'.'+raw, hashlib.sha256).digest()).decode()
             return request('webhook.php', raw, {'X-Paymove-Signature': f't={stamp},v1={signature}'})
         try:
             for _ in range(100):
@@ -92,7 +92,11 @@ $s->bindValue(':hint',json_encode(['status'=>'PENDING','order_id'=>'fixture-pm']
             assert request('order.php', payload, headers)[1]['status'] == 'paid'
             voucher = seeded['voucher']['orderId']
             assert request(f'status.php?o={voucher}')[1].get('vouchers') is None  # no codes before payment
-            assert event('COMPLETED', seeded['voucher']['total'], voucher)[1]['status'] == 'paid'
+            transaction = dict(secret=b'synthetic-transaction', currency='PLN', amountMinor=str(seeded['voucher']['total']))
+            assert event('COMPLETED', 0, voucher, type='REFUND', **transaction)[1]['status'] == 'ignored'
+            assert request(f'status.php?o={voucher}')[1].get('vouchers') is None
+            assert event('COMPLETED', 0, voucher, type='PAYMENT', **transaction)[1]['status'] == 'paid'
+            assert event('COMPLETED', seeded['voucher']['total'], voucher)[1]['changed'] is False
             code, status, _ = request(f'status.php?o={voucher}')
             assert code == 200 and status['type'] == 'voucher' and status['recipient'] == 'Ania' and len(status['vouchers']) == 1
             assert status['buyerEmail'] == 'giver@example.invalid' and status['vouchers'][0]['code']  # booking by email; the number tells copies apart
