@@ -61,10 +61,10 @@ try {
     expect(db()->querySingle('SELECT COUNT(*) FROM mail_outbox')===0,'unsigned status never mails');
     prepareCheckout($input,$key,$provider,$now+5,fn()=>['status'=>'PENDING','orderId'=>'active-resumed']);
     applyPaymentEvent(['externalId'=>$id,'status'=>'ERROR','orderId'=>'old-failed']);
-    expect(findOrder($id)['status']==='pending' && orderDisplayStatus(findOrder($id))==='pending','late old failure cannot cancel a pending resumed transaction');
+    expect(findOrder($id)['status']==='pending' && orderDisplayStatus(findOrder($id))==='confirming','late old failure cannot cancel a pending resumed transaction');
     expect(findOrder($id)['data']['payment_observation']['order_id']==='active-resumed','active observation survives old failure');
     expect(!canRecheckPayment(findOrder($id),$now+49),'fresh processing waits for webhook');
-    expect(canRecheckPayment(findOrder($id),$now+50),'missing failure webhook permits bounded status recheck');
+    expect(!canRecheckPayment(findOrder($id),$now+120),'elapsed time alone never permits resume');
     held(fn()=>prepareCheckout($input,$key,$provider,$now+6,fn()=>'REFUNDED'),'payment_review');
     held(fn()=>prepareCheckout($input,$key,$provider,$now+6,fn()=>'UNRECOGNIZED'),'payment_review');
     held(fn()=>prepareCheckout($input,$key,$provider,$now+6,function(){throw new PaymoveFailure('http',503);}));
@@ -75,9 +75,9 @@ try {
     applyPaymentEvent(['externalId'=>$id,'status'=>'CANCELED','orderId'=>'fixture-provider']);
     $processing=fn()=>['status'=>'PENDING','orderId'=>'resumed-provider'];
     expect(prepareCheckout($input,$key,$provider,$now+8,$processing)['status']==='processing','resumed processing does not show canceled');
-    expect(findOrder($id)['status']==='canceled' && orderDisplayStatus(findOrder($id))==='pending','unsigned hint hides old cancellation only');
+    expect(findOrder($id)['status']==='canceled' && orderDisplayStatus(findOrder($id))==='confirming','unsigned hint hides old cancellation only');
     applyPaymentEvent(['externalId'=>$id,'status'=>'CANCELED','orderId'=>'fixture-provider']);
-    expect(orderDisplayStatus(findOrder($id))==='pending','old failed webhook does not erase resumed processing');
+    expect(orderDisplayStatus(findOrder($id))==='confirming','old failed webhook does not erase resumed processing');
     applyPaymentEvent(['externalId'=>$id,'status'=>'ERROR','orderId'=>'resumed-provider']);
     expect(orderDisplayStatus(findOrder($id))==='canceled','new failure clears processing hint');
     $canceled=prepareCheckout($input,$key,$provider,$now+8,fn()=>'CANCELED');
@@ -152,7 +152,7 @@ try {
     recordSignedCompletion($event);
     checkSignedCompletion($fresh,fn()=>['status'=>'COMPLETED','orderId'=>'another-payment']);
     expect(findOrder($fresh)['status']==='pending','unrelated completed payment cannot release order');
-    db()->exec('UPDATE confirmation_checks SET next_at=0');
+    db()->exec('UPDATE orders SET status_check_after=0');
     checkSignedCompletion($fresh,fn()=>['status'=>'COMPLETED','orderId'=>'PAY-signed-test']);
     expect(count(vouchersFor($fresh))===1,'signed completion matched to server-stored payment link');
     recordSignedCompletion($event);
@@ -168,6 +168,18 @@ try {
         $q->bindValue(':provider',$event['orderId']);
         expect($q->execute()->fetchArray()[0]===$new['orderId'],'both webhook arrival orders resolve completion');
     }
+    $resumeKey=bin2hex(random_bytes(16));
+    $twoDaysAgo=time()-2*86400;
+    $oldPurchase=prepareCheckout($input,$resumeKey,fn()=>$url,$twoDaysAgo);
+    $resumed=prepareCheckout($input,$resumeKey,fn()=>$url,time()-60,$ready);
+    expect($resumed===$oldPurchase,'two-day-old purchase resumes its original redirect');
+    $resumedId=$resumed['orderId'];
+    $event=['orderId'=>'fixture-resumed-completion','price'=>$resumed['total']];
+    recordSignedCompletion($event);
+    $completed=fn()=>['status'=>'COMPLETED','orderId'=>$event['orderId']];
+    checkSignedCompletion($resumedId,$completed);
+    expect(findOrder($resumedId)['status']==='paid' && count(vouchersFor($resumedId))===1,
+        'recently served redirect on an old order permits signed recovery');
     $old=prepareCheckout($input,bin2hex(random_bytes(16)),fn()=>$url,time()-86401)['orderId'];
     recordSignedCompletion(['orderId'=>'PAY-unmatched','price'=>100]);
     $q=db()->prepare('SELECT count(*) FROM confirmation_checks WHERE order_id=:id'); $q->bindValue(':id',$old);

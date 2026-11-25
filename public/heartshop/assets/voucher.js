@@ -10,8 +10,10 @@ function card(o, v) {
   // Demo offers stay unlabelled (owner decision: the demo shop is self-evident). Only a real
   // offer paid in the PAYMOVE sandbox is marked on the printed face, so a forwarded PDF says it.
   el.querySelector(".voucher-demo").hidden = o.demo || !o.testPayment;
-  // Older orders may have no recipient: print no name rather than an invented one.
-  set(".gift-for", o.recipient ? t("voucher.for", { name: o.recipient }) : "");
+  // Older checkouts asked buyers for a name to follow the printed prefix.
+  let recipient = o.recipient || "";
+  if (recipient && !o.recipientVerbatim) recipient = t("voucher.for", { name: recipient });
+  set(".gift-for", recipient);
   set(".gift-message", o.dedication || "");
   set(".service-cover h2", o.product);
   set(".booking-price", I.money(o.unitPrice));

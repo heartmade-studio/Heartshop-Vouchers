@@ -404,7 +404,7 @@ form.addEventListener("submit", async e => {
 // ---------- init ----------
 function updateGiftPreview() {
   const value = id => $(id).value.trim().replace(/\s+/g, " ");
-  $("preview-for").textContent = t("voucher.for", { name: value("recipient") || "…" });
+  $("preview-for").textContent = value("recipient") || "…";
   $("preview-message").textContent = value("dedication");
 }
 

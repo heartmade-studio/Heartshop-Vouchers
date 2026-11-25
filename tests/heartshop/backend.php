@@ -144,7 +144,7 @@ try {
     check(str_contains($vmails[0]['body'],$vin['email']) && str_contains($vmails[0]['body'],'Voucher 2 · nr '.$codes[1]['code']) && str_contains($vmails[0]['body'],$codes[0]['code']),'buyer mail books by email and numbers each unit');
     check(str_contains($vmails[0]['body'],'https://shop.example.com/heartshop/voucher/twoj-voucher.html?o='.$vp['orderId']),'buyer mail links the printable voucher');
     check(!str_contains($vmails[0]['body'],'paczk') && !str_contains($vmails[0]['body'],'Wysyłamy'),'voucher mail promises no parcel');
-    check(str_contains($vmails[0]['body'],'Dla: Ania') && str_contains($vmails[1]['body'],$vin['email']),'recipient in summary; seller sees the codes');
+    check(str_contains($vmails[0]['body'],'Osoba obdarowana: Ania') && str_contains($vmails[1]['body'],$vin['email']),'recipient in summary; seller sees the codes');
     $rv=prepareCheckout(array_replace($vin,['qty'=>1]),str_repeat('d',32),$provider);
     applyPaymentEvent(['externalId'=>$rv['orderId'],'status'=>'COMPLETED','price'=>'100','orderId'=>'pm-x']);
     check(findOrder($rv['orderId'])['status']==='review' && vouchersFor($rv['orderId'])===[],'review payment issues no codes');

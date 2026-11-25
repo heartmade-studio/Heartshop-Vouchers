@@ -56,6 +56,7 @@ with tempfile.TemporaryDirectory(prefix='heartshop-standalone-') as temp:
         status=request('/heartshop/api/status.php?o='+order['orderId'])[1]
         assert status['status']=='paid' and status['demo'] is True and status['testPayment'] is True and status['type']==typ
         if KIND=='vouchers':
+            assert status['recipientVerbatim'] is True and status['recipient']==data['recipient']
             assert status['unitPrice']==25000 and len(status['vouchers'])==1
             with sqlite3.connect(repo/'var/local/orders.sqlite') as db:
                 snap=json.loads(db.execute('SELECT data FROM orders WHERE external_id=?',(order['orderId'],)).fetchone()[0])['snapshot']

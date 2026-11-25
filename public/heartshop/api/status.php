@@ -8,13 +8,13 @@ try {
     $order = validOrderId($id) ? findOrder($id) : null;
     if (!$order) jsonOut(['status' => 'unknown'], 404);
     if (in_array($order['status'],['pending','canceled'],true)) {
-        try { checkSignedCompletion($id); $order=findOrder($id); }
+        try { checkSignedCompletion($id,$statusLookup??null,forDisplay:true); }
         catch (Throwable $e) { logError($e,'confirmation_check'); }
+        $order=findOrder($id);
     }
     $d = $order['data'];
     $out = [
-        // An unsigned observation can only hide an old cancellation while we
-        // wait for the next signed event. It never reports paid or issues codes.
+        // The observation guides the buyer while signed confirmation is pending.
         'status' => orderDisplayStatus($order),
         'resumeAvailable' => canRecheckPayment($order),
         'number' => $order['number'],
@@ -33,6 +33,7 @@ try {
             'buyerEmail'  => $d['email'],
             'product'    => $d['snapshot']['name'],
             'recipient'  => $d['recipient'] ?? '',
+            'recipientVerbatim' => $d['snapshot']['recipient_verbatim'] ?? false,
             'dedication' => $d['dedication'] ?? '',
             'seller'     => cfg()['shop']['seller'] ?? '',
             'contact'    => cfg()['voucher_contact'] ?? '',

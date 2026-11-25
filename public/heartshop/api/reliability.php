@@ -36,6 +36,15 @@ function reliabilitySchema(SQLite3 $db): void {
     $db->exec('CREATE INDEX IF NOT EXISTS mail_outbox_due ON mail_outbox(status,next_attempt_at,lease_until,id)');
 }
 
+// Legacy orders have no recorded redirect and use their creation time.
+const CONFIRMATION_ACTIVITY = 'max(o.created_at,coalesce(o.payment_link_served_at,o.created_at))';
+const CONFIRMATION_WINDOW = 'c.scope=json_extract(o.data,"$.snapshot.payment_scope")
+    AND '.CONFIRMATION_ACTIVITY.' >= unixepoch()-86400
+    AND c.received_at BETWEEN '.CONFIRMATION_ACTIVITY.' AND unixepoch()';
+const CONFIRMATION_CANDIDATE = 'SELECT 1 FROM orders o JOIN signed_completions c ON '.CONFIRMATION_WINDOW.'
+    WHERE o.external_id=:id AND o.status IN ("pending","canceled")
+    AND (c.matched_order IS NULL OR c.matched_order=:id)';
+
 // PAYMOVE can omit the merchant externalId. Retain only authenticated completion fields.
 // Queue the existing orders in this payment scope once. Their provider-issued checkout
 // URLs determine the transaction identity; two equal totals never establish a match.
@@ -56,49 +65,68 @@ function recordSignedCompletion(array $event): void {
         $q->bindValue(':method',$event['paymentMethod'] ?? ''); $q->bindValue(':now',time(),SQLITE3_INTEGER); $q->execute();
         if ($db->changes()) {
             $q=$db->prepare('INSERT OR IGNORE INTO confirmation_checks(order_id)
-                SELECT external_id FROM orders WHERE status IN ("pending","canceled")
-                AND created_at BETWEEN unixepoch()-86400 AND unixepoch()
-                AND json_extract(data,"$.snapshot.payment_scope")=:scope
-                AND EXISTS (SELECT 1 FROM signed_completions WHERE scope=:scope AND provider_id=:provider AND matched_order IS NULL)');
+                SELECT o.external_id FROM orders o JOIN signed_completions c ON '.CONFIRMATION_WINDOW.'
+                WHERE o.status IN ("pending","canceled") AND c.scope=:scope AND c.provider_id=:provider
+                AND c.matched_order IS NULL');
             $q->bindValue(':scope',$scope); $q->bindValue(':provider',$id); $q->execute();
         }
         $db->exec('COMMIT');
     } catch (Throwable $e) { $db->exec('ROLLBACK'); throw $e; }
 }
 
-function checkSignedCompletion(string $id, ?callable $lookup=null): void {
+function checkSignedCompletion(string $id, ?callable $lookup=null, bool $forDisplay=false): void {
     $db=db();
     $now=time();
-    $q=$db->prepare('UPDATE confirmation_checks SET next_at=:later WHERE order_id=:id AND next_at<=:now');
-    $q->bindValue(':later',$now+60,SQLITE3_INTEGER); $q->bindValue(':id',$id); $q->bindValue(':now',$now,SQLITE3_INTEGER);
-    $q->execute();
-    if (!$db->changes()) return;
+    // Drop exhausted candidates atomically. A later event can enqueue the order again.
+    $q=$db->prepare('DELETE FROM confirmation_checks WHERE order_id=:id AND NOT EXISTS ('.CONFIRMATION_CANDIDATE.')');
+    $q->bindValue(':id',$id); $q->execute();
+    $q=$db->prepare('UPDATE confirmation_checks SET next_at=:later WHERE order_id=:id');
+    $q->bindValue(':later',$now+60,SQLITE3_INTEGER); $q->bindValue(':id',$id); $q->execute();
+    $queued=$db->changes()===1;
+    if (!$queued && !$forDisplay) return;
     $order=findOrder($id);
     $scope=paymentScope();
-    if ($order && $order['created_at'] >= $now-86400 && in_array($order['status'],['pending','canceled'],true)
-        && ($order['data']['snapshot']['payment_scope'] ?? null)===$scope) {
-        $q=$db->prepare('SELECT 1 FROM signed_completions WHERE scope=:scope AND received_at>=:created
-            AND received_at>=unixepoch()-86400 AND (matched_order IS NULL OR matched_order=:id) LIMIT 1');
-        $q->bindValue(':scope',$scope); $q->bindValue(':created',$order['created_at'],SQLITE3_INTEGER); $q->bindValue(':id',$id);
-        if ($q->execute()->fetchArray()) {
-            if (!$order['payment_url']) return;
-            $seen=($lookup ?? 'paymovePaymentStatus')($order['payment_url']);
-            if (($seen['status'] ?? '')!=='COMPLETED' || empty($seen['orderId'])) return;
-            $q=$db->prepare('UPDATE signed_completions SET matched_order=:id WHERE scope=:scope AND provider_id=:provider
-                AND received_at>=max(:created,unixepoch()-86400) AND (matched_order IS NULL OR matched_order=:id) RETURNING provider_id,price,method');
-            $q->bindValue(':scope',$scope); $q->bindValue(':provider',$seen['orderId']); $q->bindValue(':id',$id);
-            $q->bindValue(':created',$order['created_at'],SQLITE3_INTEGER);
-            $result=$q->execute(); $signed=$result->fetchArray(SQLITE3_ASSOC); $result->finalize(); $q->close();
-            if (!$signed) return;
-            applyPaymentEvent(['externalId'=>$id,'orderId'=>$signed['provider_id'],'status'=>'COMPLETED',
-                'price'=>$signed['price'],'paymentMethod'=>$signed['method']]);
-        }
+    if (!$order || !in_array($order['status'],['pending','canceled'],true) || $order['payment_state']!=='ready'
+        || !$order['payment_url'] || ($order['data']['snapshot']['payment_scope']??$scope)!==$scope) return;
+
+    $seen=refreshPaymentObservation($order,$now,$lookup);
+    if (!$queued || ($seen['status']??null)!=='COMPLETED' || empty($seen['orderId'])) return;
+    $q=$db->prepare('UPDATE signed_completions AS c SET matched_order=:id WHERE scope=:scope AND provider_id=:provider
+        AND (matched_order IS NULL OR matched_order=:id) AND EXISTS (
+            SELECT 1 FROM orders o WHERE o.external_id=:id AND o.status IN ("pending","canceled") AND '.CONFIRMATION_WINDOW.')
+        RETURNING provider_id,price,method');
+    $q->bindValue(':scope',$scope); $q->bindValue(':provider',$seen['orderId']); $q->bindValue(':id',$id);
+    $result=$q->execute(); $signed=$result->fetchArray(SQLITE3_ASSOC); $result->finalize(); $q->close();
+    if ($signed) {
+        applyPaymentEvent(['externalId'=>$id,'orderId'=>$signed['provider_id'],'status'=>'COMPLETED',
+            'price'=>$signed['price'],'paymentMethod'=>$signed['method']]);
     }
-    // An event may have been queued after the earlier SELECT. Preserve its check.
-    $q=$db->prepare('DELETE FROM confirmation_checks WHERE order_id=:id AND NOT EXISTS (
-        SELECT 1 FROM orders o JOIN signed_completions c ON c.scope=json_extract(o.data,"$.snapshot.payment_scope")
-        WHERE o.external_id=:id AND o.status IN ("pending","canceled") AND o.created_at>=unixepoch()-86400 AND c.received_at>=max(o.created_at,unixepoch()-86400)
-        AND (c.matched_order IS NULL OR c.matched_order=:id))'); $q->bindValue(':id',$id); $q->execute();
+}
+
+function refreshPaymentObservation(array $order, int $now, ?callable $lookup): ?array {
+    $db=db();
+    $id=$order['external_id'];
+    // A status poll and the worker share one provider read per order per minute.
+    $q=$db->prepare('UPDATE orders SET status_check_after=:later WHERE external_id=:id AND status_check_after<=:now');
+    $q->bindValue(':later',$now+60,SQLITE3_INTEGER); $q->bindValue(':now',$now,SQLITE3_INTEGER); $q->bindValue(':id',$id);
+    $q->execute();
+    if (!$db->changes() || !consumeLimits(['confirmation_status'=>400],$now)) return null;
+    $seen=($lookup ?? 'paymovePaymentStatus')($order['payment_url']);
+    $status=$seen['status']??null;
+    $hint=['status'=>$status,'order_id'=>paymentConfirming($status)?($seen['orderId']??null):null,'at'=>$now];
+    // A checkout or signed event that changed the order while HTTP was in flight wins.
+    $q=$db->prepare('UPDATE orders SET data=json_set(data,"$.payment_observation",json(:hint))
+        WHERE external_id=:id AND status=:status AND json_extract(data,"$.payment_observation.at") IS :previous
+        AND payment_link_served_at IS :served
+        AND status_check_after=:later');
+    $q->bindValue(':hint',json_encode($hint,JSON_THROW_ON_ERROR)); $q->bindValue(':id',$id);
+    $q->bindValue(':status',$order['status']); $q->bindValue(':later',$now+60,SQLITE3_INTEGER);
+    $q->bindValue(':served',$order['payment_link_served_at'],$order['payment_link_served_at']===null?SQLITE3_NULL:SQLITE3_INTEGER);
+    $previous=$order['data']['payment_observation']['at']??null;
+    $q->bindValue(':previous',$previous,$previous===null?SQLITE3_NULL:SQLITE3_INTEGER);
+    $q->execute();
+
+    return $seen;
 }
 
 // Orders created before typed offers have no type: they were all shipped products.
@@ -106,15 +134,26 @@ function orderType(array $data): string {
     return $data['snapshot']['type'] ?? 'shipping';
 }
 
+function paymentConfirming(?string $status): bool {
+    return in_array($status,['PENDING','WAITING_FOR_EXTERNAL_ACTION','COMPLETED'],true);
+}
+
+function paymentResumable(?string $status): bool {
+    return in_array($status,['INITIALIZED','CANCELED','ERROR'],true);
+}
+
 function orderDisplayStatus(array $order): string {
-    if ($order['status']==='canceled' && in_array($order['data']['payment_observation']['status']??null,
-        ['PENDING','WAITING_FOR_EXTERNAL_ACTION','COMPLETED'],true)) return 'pending';
+    if (in_array($order['status'],['pending','canceled'],true)
+        && paymentConfirming($order['data']['payment_observation']['status']??null)) return 'confirming';
     return $order['status'];
 }
 
 function canRecheckPayment(array $order, ?int $now = null): bool {
+    $observation=$order['data']['payment_observation']??[];
     return in_array($order['status'],['pending','canceled'],true) && $order['payment_state']==='ready'
-        && ($now??time())-(int)($order['data']['payment_observation']['at']??$order['created_at'])>=45;
+        && (!isset($order['data']['snapshot']['payment_scope']) || $order['data']['snapshot']['payment_scope']===paymentScope())
+        && paymentResumable($observation['status']??null)
+        && ($observation['at']??0)>($now??time())-60;
 }
 
 function applyPaymentEvent(array $event): array {

@@ -20,7 +20,7 @@ function makeSnapshot(array $order, array $config): array {
     ];
     if ($offer['type'] === 'voucher') {
         return $snapshot + ['delivery'=>'', 'delivery_label'=>null, 'delivery_eta'=>null, 'shipping'=>0,
-            'total'=>$items, 'valid_months'=>$offer['valid_months'],
+            'total'=>$items, 'valid_months'=>$offer['valid_months'], 'recipient_verbatim'=>true,
             'invoice_request_text'=>(string)($config['invoice_request_text'] ?? '')];
     }
     $shipping = $config['delivery'][$order['delivery']]['price'];
@@ -136,7 +136,7 @@ function resumeCheckout(array $order, ?callable $provider, int $now, ?callable $
     $scope=$order['data']['snapshot']['payment_scope']??null;
     if ($scope !== null && !hash_equals($scope,paymentScope())) checkoutNeedsReview($id);
     if ($order['payment_state']==='ready' && validPaymentUrl((string)$order['payment_url'])) {
-        return checkoutResult($order,$statusCheck,true,$now);
+        return serveCheckoutResult($order,$statusCheck,true,$now);
     }
     // Legacy real-money attempts have no recorded provider account. Never replay
     // them into a potentially different product. Legacy demo attempts are sandbox-only.
@@ -160,7 +160,7 @@ function resumeCheckout(array $order, ?callable $provider, int $now, ?callable $
         }
         $db->exec('COMMIT');
     } catch(Throwable $e) { $db->exec('ROLLBACK');throw $e; }
-    if ($reuse) return checkoutResult($current,$statusCheck,true,$now);
+    if ($reuse) return serveCheckoutResult($current,$statusCheck,true,$now);
     if ($busy) checkoutWaiting($id,$remaining);
     if ($closed) demoOnly($id);
     return finishCheckout(findOrder($id),$provider,$now,$statusCheck,true);
@@ -190,7 +190,20 @@ function finishCheckout(array $order, ?callable $provider, int $now, ?callable $
         logError($e,'payment_create');
         checkoutWaiting($id);
     }
-    return checkoutResult(findOrder($id),$statusCheck,$recovered,$now);
+    return serveCheckoutResult(findOrder($id),$statusCheck,$recovered,$now);
+}
+
+// Only a redirect delivered to the buyer extends the signed-completion window.
+function serveCheckoutResult(array $order, ?callable $statusCheck, bool $probe, int $now): array {
+    $result=checkoutResult($order,$statusCheck,$probe,$now);
+    if (isset($result['redirectUrl'])) {
+        $s=db()->prepare('UPDATE orders SET payment_link_served_at=max(coalesce(payment_link_served_at,0),:now),
+            status_check_after=0
+            WHERE external_id=:id AND status IN ("pending","canceled")');
+        $s->bindValue(':now',$now,SQLITE3_INTEGER); $s->bindValue(':id',$order['external_id']); $s->execute();
+        if (!db()->changes()) return ['orderId'=>$order['external_id'],'status'=>findOrder($order['external_id'])['status']];
+    }
+    return $result;
 }
 
 function checkoutResult(array $order, ?callable $statusCheck, bool $probe, int $now): array {
@@ -212,7 +225,7 @@ function checkoutResult(array $order, ?callable $statusCheck, bool $probe, int $
             checkoutWaiting($id);
         }
         $status=is_array($observation) ? ($observation['status']??null) : $observation;
-        if (in_array($status,['COMPLETED','PENDING','WAITING_FOR_EXTERNAL_ACTION'],true)) {
+        if (paymentConfirming($status)) {
             // This unsigned read can BLOCK payment, never issue vouchers or mail.
             $observed=['status'=>$status,'order_id'=>is_array($observation)?($observation['orderId']??null):null,'at'=>$now];
             $s=db()->prepare('UPDATE orders SET data=json_set(data,"$.payment_observation",json(:observed)) WHERE external_id=:id AND status IN ("pending","canceled")');
@@ -221,7 +234,7 @@ function checkoutResult(array $order, ?callable $statusCheck, bool $probe, int $
             if (in_array($current['status'],['paid','review'],true)) return ['orderId'=>$id,'status'=>$current['status']];
             return ['orderId'=>$id,'status'=>'processing'];
         }
-        if (!in_array($status,['INITIALIZED','CANCELED','ERROR'],true)) checkoutNeedsReview($id);
+        if (!paymentResumable($status)) checkoutNeedsReview($id);
         $s=db()->prepare('UPDATE orders SET data=json_remove(data,"$.payment_observation") WHERE external_id=:id AND status IN ("pending","canceled")');
         $s->bindValue(':id',$id);$s->execute();
     }
