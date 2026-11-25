@@ -253,10 +253,12 @@ function createPayment(string $externalId, string $number, array $order, int $to
     return $url;
 }
 
-function verifySignature(string $header, string $raw): bool {
+function verifySignature(string $header, string $raw, string $secretName = 'PAYMOVE_WEBHOOK_SECRET'): bool {
     if (!preg_match('/^t=(\d+),v1=([A-Za-z0-9+\/=]+)$/', $header, $m)) return false;
     if (abs(time() - (int)$m[1]) > 300) return false;
-    $expected = base64_encode(hash_hmac('sha256', $m[1] . '.' . $raw, secrets()['PAYMOVE_WEBHOOK_SECRET'], true));
+    $secret = secrets()[$secretName] ?? '';
+    if ($secret === '') return false;
+    $expected = base64_encode(hash_hmac('sha256', $m[1] . '.' . $raw, $secret, true));
     return hash_equals($expected, $m[2]);
 }
 
