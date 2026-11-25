@@ -207,7 +207,7 @@ function validateOrder(array $in): array {
     if ($offer['type'] === 'voucher') {
         $o['delivery'] = '';
         $o['recipient'] = clean($in['recipient'] ?? '', 60);
-        if ($o['recipient'] === '') $e['recipient'] = 'Podaj imię osoby obdarowanej.';
+        if ($o['recipient'] === '') $e['recipient'] = 'Wpisz imię lub tekst dla osoby obdarowanej.';
         elseif (containsLink($o['recipient'])) $e['recipient'] = $noLinks;
         $o['dedication'] = clean($in['dedication'] ?? '', 200);
         if (containsLink($o['dedication'])) $e['dedication'] = $noLinks;
@@ -282,7 +282,7 @@ function orderSummary(array $order): string {
     if (orderType($d) === 'voucher') {
         $lines = ["Zamówienie {$order['number']}", '', "{$q['name']} × {$q['qty']}    " . formatPln($q['items']),
             'Razem: ' . formatPln($order['total']), '', 'Kupujący:', $d['name'], $d['email']];
-        if (($d['recipient'] ?? '') !== '') $lines[] = "Dla: {$d['recipient']}";
+        if (($d['recipient'] ?? '') !== '') $lines[] = "Osoba obdarowana: {$d['recipient']}";
         if (($d['dedication'] ?? '') !== '') $lines[] = "Dedykacja: {$d['dedication']}";
         return implode("\n", array_merge($lines, invoiceLines($d)));
     }

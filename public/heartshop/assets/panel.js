@@ -88,7 +88,7 @@ function card(o) {
     ? [o.delivery ? h("p", {}, o.delivery, o.point ? ` · ${o.point}` : "") : null,
        o.address ? h("p", { class: "muted" }, o.address) : null,
        o.tracking ? h("p", { class: "muted" }, `Przesyłka: ${o.tracking}`) : null]
-    : [o.recipient ? h("p", {}, `Dla: ${o.recipient}`) : null,
+    : [o.recipient ? h("p", {}, `Osoba obdarowana: ${o.recipient}`) : null,
        o.dedication ? h("p", { class: "muted dedication" }, `„${o.dedication}”`) : null,
        o.vouchers.length ? h("ul", { class: "codes" }, o.vouchers.map((v, i) => voucherLine(o, v, i)))
          : o.status === "paid" ? null : h("p", { class: "muted" }, "Vouchery pojawią się po potwierdzeniu płatności.")];

@@ -20,7 +20,7 @@ function makeSnapshot(array $order, array $config): array {
     ];
     if ($offer['type'] === 'voucher') {
         return $snapshot + ['delivery'=>'', 'delivery_label'=>null, 'delivery_eta'=>null, 'shipping'=>0,
-            'total'=>$items, 'valid_months'=>$offer['valid_months'],
+            'total'=>$items, 'valid_months'=>$offer['valid_months'], 'recipient_verbatim'=>true,
             'invoice_request_text'=>(string)($config['invoice_request_text'] ?? '')];
     }
     $shipping = $config['delivery'][$order['delivery']]['price'];

@@ -656,10 +656,14 @@ test('voucher requires a recipient and previews the printed wording while typing
   recipient.value='   ';
   recipient.handlers.input();
   assert.ok(p.context.check(p.context.collect()).recipient);
-  assert.equal(p.element('preview-for').textContent,'Dla …');
-  recipient.value=' Olgi ';
-  recipient.handlers.input();
-  assert.equal(p.element('preview-for').textContent,'Dla Olgi');
+  assert.equal(p.element('preview-for').textContent,'…');
+  for (const wording of ['Ola', 'Dla Oli', 'Dla Was obojga w dniu rocznicy']) {
+    recipient.value=wording;
+    recipient.handlers.input();
+    assert.equal(p.context.check(p.context.collect()).recipient,undefined);
+    assert.equal(p.element('preview-for').textContent,wording);
+    assert.equal(voucherCard({recipient:wording,recipientVerbatim:true})('.gift-for').textContent,wording);
+  }
   dedication.value='Dla ukochanej\nOlgi';
   dedication.handlers.input();
   assert.equal(p.element('preview-message').textContent,'Dla ukochanej Olgi');

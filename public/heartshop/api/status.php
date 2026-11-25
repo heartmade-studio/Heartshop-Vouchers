@@ -33,6 +33,7 @@ try {
             'buyerEmail'  => $d['email'],
             'product'    => $d['snapshot']['name'],
             'recipient'  => $d['recipient'] ?? '',
+            'recipientVerbatim' => $d['snapshot']['recipient_verbatim'] ?? false,
             'dedication' => $d['dedication'] ?? '',
             'seller'     => cfg()['shop']['seller'] ?? '',
             'contact'    => cfg()['voucher_contact'] ?? '',
