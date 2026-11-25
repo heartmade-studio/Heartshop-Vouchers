@@ -120,12 +120,23 @@ $statusLookup=function(string $url): array {
                 assert request(f'status.php?o={voucher}')[1] == observed
                 reads = provider_reads.read_text().splitlines()
                 assert len(reads) == reads_before + 1 and reads[-1] == seeded['voucher']['redirectUrl']
-            # A signed event without a merchant ID makes this order a candidate.
-            assert event('COMPLETED', 0, '', type='PAYMENT', **transaction)[1]['status'] == 'received'
+                if state == 'COMPLETED':
+                    fresh = check()
+                    assert fresh.returncode == 0 and fresh.stdout == ''
+                    with sqlite3.connect(private/'orders.sqlite') as db:
+                        db.execute('UPDATE orders SET created_at=unixepoch()-960 WHERE external_id=?', (voucher,))
+                    # PAYMOVE reported completion, but no signed webhook reached this order.
+                    missing = check()
+                    assert missing.returncode == 1 and missing.stdout == f"{observed['number']} pending 16 min\n", missing
+                    with sqlite3.connect(private/'orders.sqlite') as db:
+                        assert db.execute('SELECT count(*) FROM signed_completions').fetchone()[0] == 0
+                        assert db.execute('SELECT count(*) FROM vouchers').fetchone()[0] == 0
+                        assert db.execute('SELECT count(*) FROM mail_outbox WHERE order_external_id=?', (voucher,)).fetchone()[0] == 0
+                        assert db.execute('SELECT status FROM orders WHERE external_id=?', (voucher,)).fetchone()[0] == 'pending'
+            # REFUNDED superseded COMPLETED. Only a new signed candidate can now alert.
             healthy = check()
             assert healthy.returncode == 0 and healthy.stdout == ''
-            with sqlite3.connect(private/'orders.sqlite') as db:
-                db.execute('UPDATE orders SET created_at=unixepoch()-960 WHERE external_id=?', (voucher,))
+            assert event('COMPLETED', 0, '', type='PAYMENT', **transaction)[1]['status'] == 'received'
             stuck = check()
             assert stuck.returncode == 1 and stuck.stdout == f"{observed['number']} pending 16 min\n", stuck
             with sqlite3.connect(private/'orders.sqlite') as db:

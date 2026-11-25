@@ -24,8 +24,9 @@ try {
         clearstatcache();
         if (is_file($errors) && filesize($errors)>0 && $now-filemtime($errors)<3600) $problems[]='worker errors in the last hour (mail-worker.err)';
         $stuck=db()->query('SELECT o.id, unixepoch()-o.created_at AS age FROM orders o
-            WHERE o.status="pending" AND o.created_at<unixepoch()-900 AND EXISTS (
-                SELECT 1 FROM signed_completions c WHERE c.matched_order IS NULL AND '.CONFIRMATION_WINDOW.')
+            WHERE o.status="pending" AND o.created_at<unixepoch()-900 AND (
+                json_extract(o.data,"$.payment_observation.status")="COMPLETED" OR EXISTS (
+                    SELECT 1 FROM signed_completions c WHERE c.matched_order IS NULL AND '.CONFIRMATION_WINDOW.'))
             ORDER BY o.created_at,o.id');
         $alert=false;
         while ($row=$stuck->fetchArray(SQLITE3_ASSOC)) {
