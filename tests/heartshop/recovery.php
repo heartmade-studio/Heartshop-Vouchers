@@ -138,6 +138,18 @@ try {
     failure(fn()=>decodePaymoveResponse('{}',201),'http');
     expect(decodePaymoveResponse('{"redirectUrl":"test"}',200)['redirectUrl']==='test','valid JSON');
     expect(!str_contains(json_encode((new PaymoveFailure('http',500))->diagnostic()),'secret'),'diagnostics contain no response data');
+    $new=prepareCheckout($input,bin2hex(random_bytes(16)),fn()=>$url,time());
+    $fresh=$new['orderId'];
+    $event=['orderId'=>'PAY-signed-test','price'=>$new['total'],'paymentMethod'=>'BLIK'];
+    recordSignedCompletion($event);
+    checkSignedCompletion($fresh,fn()=>['status'=>'COMPLETED','orderId'=>'another-payment']);
+    expect(findOrder($fresh)['status']==='pending','unrelated completed payment cannot release order');
+    db()->exec('UPDATE confirmation_checks SET next_at=0');
+    checkSignedCompletion($fresh,fn()=>['status'=>'COMPLETED','orderId'=>'PAY-signed-test']);
+    expect(count(vouchersFor($fresh))===1,'signed completion matched to server-stored payment link');
+    recordSignedCompletion($event);
+    checkSignedCompletion($fresh,fn()=>['status'=>'COMPLETED','orderId'=>'PAY-signed-test']);
+    expect(count(vouchersFor($fresh))===1,'duplicate completion does not issue twice');
     echo "recovery: $checks assertions passed\n";
 } finally {
     foreach(glob($private.'/*') as $file) unlink($file);

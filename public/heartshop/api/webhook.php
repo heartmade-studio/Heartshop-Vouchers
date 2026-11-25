@@ -19,6 +19,11 @@ try {
             jsonOut(['error'=>'Invalid payment'],400);
         }
         $event['price']=$event['amountMinor'] ?? null;
+        if (($event['externalId'] ?? '') === '') {
+            if (($event['status'] ?? '') !== 'COMPLETED') jsonOut(['status'=>'ignored']);
+            recordSignedCompletion($event);
+            jsonOut(['status'=>'received']);
+        }
     }
     jsonOut(applyPaymentEvent($event)); // 200 only after durable status AND outbox commit.
 } catch (InvalidArgumentException $e) {

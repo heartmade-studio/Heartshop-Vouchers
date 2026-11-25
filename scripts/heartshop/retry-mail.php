@@ -32,6 +32,12 @@ try {
     if (is_link($lockPath)) throw new RuntimeException('Unsafe worker lock');
     $lock=fopen($lockPath,'c');
     if (!$lock || !flock($lock,LOCK_EX|LOCK_NB)) { fwrite(STDERR,"Worker busy\n");exit(3); }
+    $due=db()->query('SELECT order_id FROM confirmation_checks WHERE next_at<=unixepoch() ORDER BY next_at, rowid LIMIT 8');
+    $ids=[]; while ($row=$due->fetchArray(SQLITE3_ASSOC)) $ids[]=$row['order_id'];
+    $due->finalize();
+    foreach ($ids as $id) {
+        try { checkSignedCompletion($id); } catch (Throwable $e) { logError($e,'confirmation_check'); }
+    }
     $counts=processMailQueue(null,20);
     echo json_encode($counts).PHP_EOL;
     exit($counts['failed']>0?1:0);
