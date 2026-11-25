@@ -150,6 +150,24 @@ try {
     recordSignedCompletion($event);
     checkSignedCompletion($fresh,fn()=>['status'=>'COMPLETED','orderId'=>'PAY-signed-test']);
     expect(count(vouchersFor($fresh))===1,'duplicate completion does not issue twice');
+    foreach ([true,false] as $legacyFirst) {
+        $new=prepareCheckout($input,bin2hex(random_bytes(16)),fn()=>$url,time());
+        $event=['orderId'=>'PAY-overlap-'.(int)$legacyFirst,'price'=>$new['total'],'paymentMethod'=>'BLIK'];
+        if (!$legacyFirst) recordSignedCompletion($event);
+        applyPaymentEvent($event+['externalId'=>$new['orderId'],'status'=>'COMPLETED']);
+        if ($legacyFirst) recordSignedCompletion($event);
+        $q=db()->prepare('SELECT matched_order FROM signed_completions WHERE provider_id=:provider');
+        $q->bindValue(':provider',$event['orderId']);
+        expect($q->execute()->fetchArray()[0]===$new['orderId'],'both webhook arrival orders resolve completion');
+    }
+    $old=prepareCheckout($input,bin2hex(random_bytes(16)),fn()=>$url,time()-86401)['orderId'];
+    recordSignedCompletion(['orderId'=>'PAY-unmatched','price'=>100]);
+    $q=db()->prepare('SELECT count(*) FROM confirmation_checks WHERE order_id=:id'); $q->bindValue(':id',$old);
+    expect($q->execute()->fetchArray()[0]===0,'old order excluded from new checks');
+    $q=db()->prepare('INSERT INTO confirmation_checks(order_id) VALUES(:id)'); $q->bindValue(':id',$old); $q->execute();
+    checkSignedCompletion($old,function(){throw new RuntimeException('expired order queried');});
+    $q=db()->prepare('SELECT count(*) FROM confirmation_checks WHERE order_id=:id'); $q->bindValue(':id',$old);
+    expect($q->execute()->fetchArray()[0]===0,'expired queued order removed');
     echo "recovery: $checks assertions passed\n";
 } finally {
     foreach(glob($private.'/*') as $file) unlink($file);
