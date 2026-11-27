@@ -14,10 +14,11 @@ try {
     $event=json_decode($raw,true);
     if (!is_array($event)) jsonOut(['error'=>'Invalid event'],400);
     if ($transaction) {
-        if (($event['type'] ?? '') === 'REFUND') jsonOut(['status'=>'ignored']);
-        if (($event['type'] ?? '') !== 'PAYMENT' || ($event['currency'] ?? '') !== 'PLN') {
+        // One contract: signed PLN PAYMENT and REFUND transactions only.
+        if (!in_array($event['type'] ?? '',['PAYMENT','REFUND'],true) || ($event['currency'] ?? '') !== 'PLN') {
             jsonOut(['error'=>'Invalid payment'],400);
         }
+        if ($event['type']==='REFUND') jsonOut(applyRefundEvent($event));
         $event['price']=$event['amountMinor'] ?? null;
         if (($event['externalId'] ?? '') === '') {
             if (($event['status'] ?? '') !== 'COMPLETED') jsonOut(['status'=>'ignored']);

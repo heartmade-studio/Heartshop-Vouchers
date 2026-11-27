@@ -3,7 +3,7 @@
 // All customer text goes through textContent, never innerHTML.
 const $ = id => document.getElementById(id);
 const API = "../api/panel.php";
-const STATUS = { paid: "Opłacone", review: "Do sprawdzenia", pending: "Nieopłacone", canceled: "Anulowane" };
+const STATUS = { paid: "Opłacone", review: "Do sprawdzenia", pending: "Nieopłacone", canceled: "Anulowane", refunded: "Zwrócone" };
 const VIEWS = {
   todo: { label: "Do obsłużenia", match: o => (o.status === "paid" && !o.done_at) || o.status === "review" },
   paid: { label: "Opłacone", match: o => o.status === "paid" },
@@ -104,6 +104,9 @@ function card(o) {
       h("span", { class: "order-total" }, money(o.total))),
     h("p", { class: "order-product" }, o.product ? `${o.product} × ${o.qty}` : "Zamówienie sprzed zapisu produktu"),
     o.status === "review" ? h("p", { class: "form-alert" }, "Kwota lub identyfikator płatności się nie zgadza. Sprawdź tę płatność w panelu Paymove, zanim cokolwiek wydasz.") : null,
+    o.status === "refunded" ? h("p", { class: "form-alert" }, o.type === "voucher"
+      ? "Płatność zwrócona w Paymove. Vouchery z tego zamówienia są nieważne."
+      : "Płatność zwrócona w Paymove. Nie wysyłaj towaru; jeśli już wyszedł, uzgodnij zwrot.") : null,
     h("div", { class: "order-body" }, h("div", { class: "contact" }, contact), h("div", {}, details)),
     invoice,
     h("footer", { class: "order-foot" },

@@ -83,7 +83,7 @@ Run `bash scripts/heartshop/check.sh`, then exercise your HTTPS sandbox installa
 
 Finally perform an explicitly authorized small live transaction and its operational handling before announcing the merchant shop as live-verified. This repository's initial extraction did not perform real payments, shipment purchases, invoice issuance or outbound mail.
 
-`review` orders and attempts held with `payment_review` require reconciliation against PAYMOVE (uncertain creates recover automatically; see docs/integrations.md); do not mark paid by editing SQLite without a reviewed recovery procedure. Refunds and double payments after a late completion are manual merchant operations. Inventory is not reserved or tracked by Heartshop.
+`review` orders and attempts held with `payment_review` require reconciliation against PAYMOVE (uncertain creates recover automatically; see docs/integrations.md); do not mark paid by editing SQLite without a reviewed recovery procedure. Refunds and double payments after a late completion are manual merchant operations. A refund PAYMOVE confirms through the TRANSACTION webhook moves the order to `refunded` and withdraws its voucher codes (see docs/integrations.md). Inventory is not reserved or tracked by Heartshop.
 
 ## Build and hosting acceptance
 

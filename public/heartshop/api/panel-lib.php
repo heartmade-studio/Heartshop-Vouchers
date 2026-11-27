@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 /** The seller's orders panel: one password (hash in the private .env), sessions in SQLite. */
 const PANEL_COOKIE = 'hs_panel';
-const PANEL_TTL = 14 * 86400; // sliding: every visit extends it
+const PANEL_TTL = 14 * 86400; // sliding: every visit extends it, up to PANEL_MAX_AGE after login
+const PANEL_MAX_AGE = 30 * 86400;
 
 final class PanelProblem extends RuntimeException {
     public function __construct(public int $httpStatus, public string $reason, string $message) { parent::__construct($message); }
@@ -12,6 +13,15 @@ final class PanelProblem extends RuntimeException {
 function panelSchema(SQLite3 $db): void {
     // Only a hash of the session token is stored: a copied database cannot log anyone in.
     $db->exec('CREATE TABLE IF NOT EXISTS panel_sessions (token_hash TEXT PRIMARY KEY, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)');
+    // Sessions from before the fingerprint have none and are refused: one extra login.
+    $cols=[]; $res=$db->query('PRAGMA table_info(panel_sessions)');
+    while ($col=$res->fetchArray(SQLITE3_ASSOC)) $cols[]=$col['name'];
+    if (!in_array('password_fp',$cols,true)) $db->exec('ALTER TABLE panel_sessions ADD COLUMN password_fp TEXT');
+}
+
+// Binds a session to the password it was opened with: a new PANEL_PASSWORD_HASH ends every session.
+function panelPasswordFingerprint(string $hash): string {
+    return hash('sha256', 'heartshop-panel:' . $hash);
 }
 
 // Generate with scripts/heartshop/panel-password.php; without it the panel stays closed.
@@ -31,9 +41,14 @@ function panelLogin(mixed $password, string $address, ?int $now = null): ?string
     if (!is_string($password) || $password === '' || strlen($password) > 200 || !password_verify($password, $hash)) return null;
     $token = bin2hex(random_bytes(32));
     $db = db();
-    $db->exec('DELETE FROM panel_sessions WHERE expires_at < ' . $now);
-    $s = $db->prepare('INSERT INTO panel_sessions(token_hash,created_at,expires_at) VALUES(:h,:now,:exp)');
+    $fp = panelPasswordFingerprint($hash);
+    $d = $db->prepare('DELETE FROM panel_sessions WHERE expires_at < :now OR password_fp IS NOT :fp');
+    $d->bindValue(':now', $now, SQLITE3_INTEGER);
+    $d->bindValue(':fp', $fp);
+    $d->execute();
+    $s = $db->prepare('INSERT INTO panel_sessions(token_hash,created_at,expires_at,password_fp) VALUES(:h,:now,:exp,:fp)');
     $s->bindValue(':h', hash('sha256', $token));
+    $s->bindValue(':fp', $fp);
     $s->bindValue(':now', $now, SQLITE3_INTEGER);
     $s->bindValue(':exp', $now + PANEL_TTL, SQLITE3_INTEGER);
     $s->execute();
@@ -42,11 +57,15 @@ function panelLogin(mixed $password, string $address, ?int $now = null): ?string
 
 function panelSessionValid(mixed $token, ?int $now = null): bool {
     $now ??= time();
-    if (!is_string($token) || !preg_match('/^[a-f0-9]{64}$/D', $token)) return false;
-    $s = db()->prepare('UPDATE panel_sessions SET expires_at=:exp WHERE token_hash=:h AND expires_at>=:now');
+    $hash = panelPasswordHash();
+    if ($hash === null || !is_string($token) || !preg_match('/^[a-f0-9]{64}$/D', $token)) return false;
+    $s = db()->prepare('UPDATE panel_sessions SET expires_at=min(:exp, created_at+:max)
+        WHERE token_hash=:h AND expires_at>=:now AND created_at+:max>=:now AND password_fp=:fp');
     $s->bindValue(':exp', $now + PANEL_TTL, SQLITE3_INTEGER);
+    $s->bindValue(':max', PANEL_MAX_AGE, SQLITE3_INTEGER);
     $s->bindValue(':h', hash('sha256', $token));
     $s->bindValue(':now', $now, SQLITE3_INTEGER);
+    $s->bindValue(':fp', panelPasswordFingerprint($hash));
     $s->execute();
     return db()->changes() === 1;
 }
@@ -140,7 +159,7 @@ function panelResend(mixed $id, ?int $now = null): void {
 
 /** Semicolon CSV with a BOM, so Polish Excel opens it with the right columns and letters. */
 function panelCsv(array $orders): string {
-    $statuses = ['paid' => 'opłacone', 'review' => 'do sprawdzenia', 'pending' => 'nieopłacone', 'canceled' => 'anulowane'];
+    $statuses = ['paid' => 'opłacone', 'review' => 'do sprawdzenia', 'pending' => 'nieopłacone', 'canceled' => 'anulowane', 'refunded' => 'zwrócone'];
     $cell = function (mixed $v): string {
         $v = (string)$v;
         if ($v !== '' && str_contains('=+-@', $v[0])) $v = "'" . $v; // no formulas from customer input

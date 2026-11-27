@@ -150,6 +150,22 @@ try {
     check(findOrder($rv['orderId'])['status']==='review' && vouchersFor($rv['orderId'])===[],'review payment issues no codes');
     $rmail=db()->querySingle("SELECT body FROM mail_outbox WHERE order_external_id='{$rv['orderId']}'");
     check(str_contains($rmail,'nie zostały wydane'),'review mail says no codes were issued');
+    // ---------- refunds ----------
+    $refund=fn($id,$parent)=>applyRefundEvent(['externalId'=>$id,'orderId'=>$parent.'-r1','parentOrderId'=>$parent,'status'=>'COMPLETED']);
+    $dup=prepareCheckout(array_replace($vin,['qty'=>1]),str_repeat('7',32),$provider);
+    $pay=fn($id,$tx,$total)=>applyPaymentEvent(['externalId'=>$id,'status'=>'COMPLETED','price'=>(string)$total,'orderId'=>$tx]);
+    $pay($dup['orderId'],'pm-dup-a',$dup['total']); $pay($dup['orderId'],'pm-dup-b',$dup['total']);
+    check($refund($dup['orderId'],'pm-dup-b')===['status'=>'paid','changed'=>false] && setVoucherUsed(vouchersFor($dup['orderId'])[0]['code'],true)[0],
+        'refunding a duplicate payment keeps the order paid and its codes redeemable');
+    check($refund($dup['orderId'],'pm-dup-a')===['status'=>'refunded','changed'=>true],'refunding the paying transaction withdraws the order');
+    $early=prepareCheckout(array_replace($vin,['qty'=>1]),str_repeat('8',32),$provider);
+    check($refund($early['orderId'],'pm-early')['status']==='pending','a refund before the payment is recorded without changing the order');
+    $pay($early['orderId'],'pm-early',$early['total']);
+    $emails=db()->querySingle("SELECT COUNT(*) FROM mail_outbox WHERE order_external_id='{$early['orderId']}' AND subject LIKE 'Zwrot%'");
+    check(findOrder($early['orderId'])['status']==='refunded' && vouchersFor($early['orderId'])===[] && $emails===1
+        && db()->querySingle("SELECT COUNT(*) FROM mail_outbox WHERE order_external_id='{$early['orderId']}'")===1,
+        'a payment confirmed after its own refund issues no codes and mails only the seller');
+    check($refund($rv['orderId'],'pm-x')===['status'=>'refunded','changed'=>true],'a review order is withdrawn by a refund of its reported payment');
     $code=$codes[0]['code'];
     check(setVoucherUsed(strtolower(str_replace('-',' ',$code)),true)[0]===true,'redeem accepts the code as typed');
     check(setVoucherUsed($code,true)[1]==='already_used','a code is used only once');
@@ -166,6 +182,14 @@ try {
     check(is_string($token) && panelSessionValid($token,$pnow+60),'right password opens a session');
     check(!str_contains((string)db()->querySingle('SELECT token_hash FROM panel_sessions'),$token),'only a hash of the session token is stored');
     check(!panelSessionValid($token,$pnow+PANEL_TTL+120) && !panelSessionValid(($token[0]==='f' ? 'e' : 'f').substr($token,1),$pnow) && !panelSessionValid(null),'expired, forged and missing sessions refused');
+    $slide=panelLogin('synthetic-panel-pass','203.0.113.9',$pnow);
+    check(panelSessionValid($slide,$pnow+13*86400) && panelSessionValid($slide,$pnow+26*86400)
+        && !panelSessionValid($slide,$pnow+PANEL_MAX_AGE+60),'a used session still ends 30 days after login');
+    $other=panelLogin('synthetic-panel-pass','203.0.113.9',$pnow);
+    db()->exec("UPDATE panel_sessions SET password_fp='".panelPasswordFingerprint('$2y$previous-hash')."' WHERE token_hash='".hash('sha256',$other)."'");
+    check(!panelSessionValid($other,$pnow+60) && panelSessionValid($token,$pnow+60),'a session opened with another password hash is refused');
+    panelLogin('synthetic-panel-pass','203.0.113.9',$pnow);
+    check((int)db()->querySingle("SELECT COUNT(*) FROM panel_sessions WHERE token_hash='".hash('sha256',$other)."'")===0,'login removes sessions of an old password');
     panelLogout($token);
     check(!panelSessionValid($token,$pnow+60),'logout ends the session');
     for($i=0;$i<8;$i++) panelLogin('wrong','203.0.113.5',$pnow);

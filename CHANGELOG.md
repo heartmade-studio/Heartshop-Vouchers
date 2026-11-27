@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- A signed PAYMOVE `REFUND` of the payment that paid an order moves it to `refunded`: its voucher codes stop redeeming, the status page hides them and the seller gets an email. A refund of another transaction, such as a duplicate payment, changes nothing.
+- TRANSACTION webhooks accept only PLN `PAYMENT` and `REFUND` events. The deprecated `PAYMOVE_WEBHOOK_SECRET` is optional once `PAYMOVE_TRANSACTION_SECRET` is set; remove it after verifying the TRANSACTION subscription.
+- Panel sessions are bound to the current password hash and expire at most 30 days after login. Changing the password ends every session; sessions opened before this release need one new login.
+
 ## v0.2.0 — 2026-11-16
 
 - Add three example voucher prices, linked from the storefront to the checkout selector. Each printed or downloaded voucher shows its purchased unit value.

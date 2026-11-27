@@ -61,7 +61,7 @@ try {
     if (in_array($action, ['redeem', 'unredeem'], true) && $method === 'POST') {
         [$ok, $reason, $voucher] = setVoucherUsed($in['code'] ?? null, $action === 'redeem');
         $messages = ['invalid' => 'Kod ma 8 znaków, np. ABCD-2345.', 'unknown' => 'Nie ma takiego kodu.',
-            'not_paid' => 'Zamówienie z tym kodem nie jest opłacone.', 'already_used' => 'Ten voucher został już wykorzystany.',
+            'not_paid' => 'Zamówienie z tym kodem nie jest opłacone.', 'refunded' => 'Płatność za ten voucher została zwrócona. Voucher jest nieważny.', 'already_used' => 'Ten voucher został już wykorzystany.',
             'not_used' => 'Ten voucher nie był oznaczony jako wykorzystany.', 'expired' => 'Ten voucher stracił ważność.'];
         $body = ['ok' => $ok, 'code' => $reason];
         if ($voucher) $body['voucher'] = ['code' => $voucher['code'], 'status' => $voucher['status'],

@@ -14,6 +14,13 @@ function reliabilitySchema(SQLite3 $db): void {
         method TEXT, received_at INTEGER NOT NULL, matched_order TEXT,
         PRIMARY KEY(scope,provider_id)
     )');
+    // Completed refunds by refunded transaction, kept even when no order is paid yet:
+    // a payment completion delivered after its own refund must never fulfil.
+    $db->exec('CREATE TABLE IF NOT EXISTS refunded_transactions (
+        scope TEXT NOT NULL, parent_order_id TEXT NOT NULL, refund_order_id TEXT NOT NULL,
+        external_id TEXT NOT NULL, received_at INTEGER NOT NULL,
+        PRIMARY KEY(scope,parent_order_id)
+    )');
     $db->exec('CREATE TABLE IF NOT EXISTS confirmation_checks (
         order_id TEXT PRIMARY KEY, next_at INTEGER NOT NULL DEFAULT 0
     )');
@@ -205,14 +212,27 @@ function applyPaymentEvent(array $event): array {
             if (trim($event['orderId']??'')==='' || (ltrim((string)$price,'0') ?: '0') !== (string)$order['total'] ||
                 (!empty($order['paymove_order_id']) && ($event['orderId']??null)!==$order['paymove_order_id'] && !$failedBinding)) { $target='review'; $review=true; }
             else { $target='paid'; $paidAt=time(); }
+            $refunded=$db->prepare('SELECT refund_order_id FROM refunded_transactions WHERE scope=:scope AND parent_order_id=:provider');
+            $refunded->bindValue(':scope',$order['data']['snapshot']['payment_scope'] ?? paymentScope());
+            $refunded->bindValue(':provider',trim($event['orderId']??''));
+            $refundId=$refunded->execute()->fetchArray(SQLITE3_NUM)[0] ?? null;
+            if ($refundId!==null) { $target='refunded'; $paidAt=null; $review=false; }
         } elseif (in_array($incoming,['CANCELED','ERROR'],true) && $status==='pending') {
             $target='canceled';
         }
         $stmt=$db->prepare('UPDATE orders SET status=:status, paid_at=CASE WHEN :paid IS NULL THEN paid_at ELSE :paid END,
             payment_method=COALESCE(:method,payment_method), paymove_order_id=CASE WHEN :paid IS NOT NULL THEN :pm ELSE paymove_order_id END,
-            data=json_remove(data,"$.payment_observation") WHERE external_id=:id AND status=:old');
-        $stmt->bindValue(':status',$target); $stmt->bindValue(':paid',$paidAt, $paidAt===null?SQLITE3_NULL:SQLITE3_INTEGER); $stmt->bindValue(':method',$event['paymentMethod']??null,isset($event['paymentMethod'])?SQLITE3_TEXT:SQLITE3_NULL); $stmt->bindValue(':pm',$event['orderId']??null,isset($event['orderId'])?SQLITE3_TEXT:SQLITE3_NULL); $stmt->bindValue(':id',$event['externalId']); $stmt->bindValue(':old',$status); $stmt->execute();
+            data=CASE WHEN :refund IS NULL THEN json_remove(data,"$.payment_observation")
+                ELSE json_set(json_remove(data,"$.payment_observation"),"$.refund",json(:refund)) END
+            WHERE external_id=:id AND status=:old');
+        $stmt->bindValue(':status',$target); $stmt->bindValue(':paid',$paidAt, $paidAt===null?SQLITE3_NULL:SQLITE3_INTEGER); $stmt->bindValue(':method',$event['paymentMethod']??null,isset($event['paymentMethod'])?SQLITE3_TEXT:SQLITE3_NULL); $stmt->bindValue(':pm',$event['orderId']??null,isset($event['orderId'])?SQLITE3_TEXT:SQLITE3_NULL); $stmt->bindValue(':id',$event['externalId']); $stmt->bindValue(':old',$status);
+        $refund=$target==='refunded' ? ['order_id'=>$refundId,'parent_order_id'=>$event['orderId'],'at'=>time()] : null;
+        $stmt->bindValue(':refund',$refund===null?null:json_encode($refund,JSON_THROW_ON_ERROR),$refund===null?SQLITE3_NULL:SQLITE3_TEXT);
+        $stmt->execute();
         $changed=$db->changes()===1;
+        if ($changed && $target==='refunded') {
+            foreach (refundNotices($order,$refund) as $message) queueMail($db,$event['externalId'],$message);
+        }
         if ($changed && in_array($target,['paid','review'],true) && in_array($status,['pending','canceled'],true)) {
             $updated=findOrder($event['externalId']);
             if ($target==='paid') {
@@ -231,6 +251,72 @@ function applyPaymentEvent(array $event): array {
         $db->exec('COMMIT');
         $result=findOrder($event['externalId']); return ['status'=>$result['status'],'changed'=>$changed];
     } catch(Throwable $e) { try{$db->exec('ROLLBACK');}catch(Throwable){} throw $e; }
+}
+
+// PAYMOVE refunds are always full and name the refunded payment in parentOrderId. A completed
+// refund of the transaction that paid an order withdraws it: its voucher codes stop redeeming and
+// it leaves the Furgonetka export. A refund of any other transaction (a duplicate payment) changes nothing.
+function applyRefundEvent(array $event): array {
+    foreach (['externalId','orderId','parentOrderId','status'] as $key) {
+        if (!is_string($event[$key] ?? null) || strlen($event[$key])>128) throw new InvalidArgumentException('Invalid refund event');
+    }
+    if ($event['status']!=='COMPLETED' || $event['parentOrderId']==='') return ['status'=>'ignored','changed'=>false];
+    $db=db(); $db->exec('BEGIN IMMEDIATE');
+    try {
+        $r=$db->prepare('INSERT OR IGNORE INTO refunded_transactions(scope,parent_order_id,refund_order_id,external_id,received_at)
+            VALUES(:scope,:parent,:refund,:id,:now)');
+        $r->bindValue(':scope',paymentScope()); $r->bindValue(':parent',$event['parentOrderId']);
+        $r->bindValue(':refund',$event['orderId']); $r->bindValue(':id',$event['externalId']);
+        $r->bindValue(':now',time(),SQLITE3_INTEGER); $r->execute();
+        // A paid order is withdrawn only by a refund of its bound paying transaction, never of a
+        // duplicate payment. A review order has no binding; its signed completions identify it.
+        // The merchant externalId can be empty; the transaction alone then identifies one order.
+        $q=$db->prepare('SELECT external_id FROM orders o WHERE (:id="" OR external_id=:id)
+            AND ((status="paid" AND paymove_order_id=:parent) OR (status="review" AND (paymove_order_id=:parent
+                OR EXISTS (SELECT 1 FROM payment_transactions t
+                    WHERE t.order_external_id=o.external_id AND t.provider_order_id=:parent AND t.status="COMPLETED"))))
+            LIMIT 2');
+        $q->bindValue(':id',$event['externalId']); $q->bindValue(':parent',$event['parentOrderId']);
+        $res=$q->execute(); $ids=[];
+        while ($row=$res->fetchArray(SQLITE3_ASSOC)) $ids[]=$row['external_id'];
+        $res->finalize();
+        if (count($ids)!==1) {
+            $db->exec('COMMIT');
+            $known=$event['externalId']!=='' ? findOrder($event['externalId']) : null;
+            return ['status'=>$known['status'] ?? 'ignored','changed'=>false];
+        }
+        $order=findOrder($ids[0]);
+        $refund=['order_id'=>$event['orderId'],'parent_order_id'=>$event['parentOrderId'],'at'=>time()];
+        $u=$db->prepare('UPDATE orders SET status="refunded", data=json_set(data,"$.refund",json(:refund))
+            WHERE external_id=:id AND status=:old');
+        $u->bindValue(':refund',json_encode($refund,JSON_THROW_ON_ERROR)); $u->bindValue(':id',$order['external_id']);
+        $u->bindValue(':old',$order['status']); $u->execute();
+        $changed=$db->changes()===1;
+        if ($changed) foreach (refundNotices($order,$refund) as $message) queueMail($db,$order['external_id'],$message);
+        $db->exec('COMMIT');
+        return ['status'=>'refunded','changed'=>$changed];
+    } catch(Throwable $e) { try{$db->exec('ROLLBACK');}catch(Throwable){} throw $e; }
+}
+
+/** The merchant's notice that a paid order was withdrawn by a refund. $order is the state before it. */
+function refundNotices(array $order, array $refund): array {
+    $merchant=(string)(secrets()['MERCHANT_EMAIL']??'');
+    if ($merchant==='') return [];
+    if (orderType($order['data'])==='voucher') {
+        $codes=array_map(fn($v)=>"{$v['code']}".($v['status']==='used' ? ' (był już wykorzystany)' : ''),vouchersFor($order['external_id']));
+        $what=$codes ? "Kody voucherów z tego zamówienia są unieważnione — panel nie pozwoli ich zrealizować.\nKody: ".implode(', ',$codes)
+            : "Płatność potwierdzono dopiero po zwrocie, więc vouchery nie zostały wydane.";
+    } elseif (!in_array($order['status'],['paid','review'],true)) {
+        $what="Płatność potwierdzono dopiero po zwrocie, więc zamówienie nie trafi do Furgonetki. Nie wysyłaj towaru.";
+    } else {
+        $what="Zamówienie zniknęło z eksportu do Furgonetki. Jeśli paczka została już przygotowana lub nadana"
+            .(!empty($order['tracking_number']) ? " (nr przesyłki {$order['tracking_number']})" : '')
+            .", zatrzymaj ją albo uzgodnij z kupującym zwrot towaru.";
+    }
+    return [[$merchant,"Zwrot płatności {$order['number']}",
+        "PAYMOVE potwierdził zwrot płatności za zamówienie {$order['number']}. $what\n\n"
+        ."ID zwrotu Paymove: {$refund['order_id']} (płatność {$refund['parent_order_id']})\n\n".orderSummary($order),
+        (string)($order['data']['email'] ?? '') ?: null]];
 }
 
 /** $message is [recipient, subject, body, reply-to]. The caller owns any surrounding transaction. */

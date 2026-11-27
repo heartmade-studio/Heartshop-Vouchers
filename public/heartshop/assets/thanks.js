@@ -27,7 +27,7 @@ function show(state, o = {}) {
   const badge = $("badge");
   $("action").textContent = homeAction.text;
   $("action").href = homeAction.href;
-  $("action").hidden = ["review", "slow", "confirming"].includes(state);
+  $("action").hidden = ["review", "slow", "confirming", "refunded"].includes(state);
   if (state === "paid") {
     badge.className = "badge-mark";
     badge.textContent = "✓";
@@ -51,6 +51,11 @@ function show(state, o = {}) {
     badge.textContent = "!";
     $("title").textContent = t("thanks.review.title");
     $("text").textContent = t("thanks.review.text", { number: o.number });
+  } else if (state === "refunded") {
+    badge.className = "badge-mark wait";
+    badge.textContent = "↩";
+    $("title").textContent = t("thanks.refunded.title");
+    $("text").textContent = t("thanks.refunded.text", { number: o.number });
   } else if (state === "canceled") {
     badge.className = "badge-mark wait";
     badge.textContent = "!";
@@ -105,7 +110,7 @@ async function poll() {
       setTimeout(poll, slow ? 10000 : 2000);
       return;
     }
-    if (o.status === "paid" || o.status === "review" || o.status === "unknown") return show(o.status, o);
+    if (["paid", "review", "refunded", "unknown"].includes(o.status)) return show(o.status, o);
   } catch {}
   show("slow");
   setTimeout(poll, slow ? 10000 : 2000);
