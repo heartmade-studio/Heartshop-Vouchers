@@ -147,7 +147,11 @@ $statusLookup=function(string $url): array {
             assert expired.returncode == 0 and expired.stdout == ''
             with sqlite3.connect(private/'orders.sqlite') as db:
                 db.execute('UPDATE signed_completions SET received_at=? WHERE provider_id=?', (receipt, 'fixture-voucher'))
-            assert event('COMPLETED', 0, voucher, type='REFUND', **transaction)[1]['status'] == 'ignored'
+            # A refund before any confirmed payment withdraws nothing.
+            assert event('COMPLETED', 0, voucher, type='REFUND', parentOrderId='fixture-voucher', **transaction)[1] == {'status': 'pending', 'changed': False}
+            assert event('COMPLETED', 0, voucher, type='REFUND', **transaction)[0] == 400  # no parentOrderId
+            assert event('COMPLETED', 0, voucher, type='CHARGEBACK', **transaction)[0] == 400
+            assert event('COMPLETED', 0, voucher, type='PAYMENT', **dict(transaction, currency='EUR'))[0] == 400
             assert request(f'status.php?o={voucher}')[1].get('vouchers') is None
             next_observation(voucher, 'COMPLETED')
             assert request(f'status.php?o={voucher}')[1]['status'] == 'paid'
@@ -184,6 +188,22 @@ $statusLookup=function(string $url): array {
             code, again, _ = request('panel.php?action=redeem', redeem, session)
             assert code == 409 and again['code'] == 'already_used'
             assert request(f'status.php?o={voucher}')[1]['vouchers'][0]['status'] == 'used'
+            # Refunds: only the signed refund of the paying transaction withdraws the order.
+            refund = dict(transaction, provider='fixture-voucher-r1')
+            assert event('COMPLETED', 0, voucher, type='REFUND', parentOrderId='fixture-duplicate', **refund)[1] == {'status': 'paid', 'changed': False}
+            assert event('PENDING', 0, voucher, type='REFUND', parentOrderId='fixture-voucher', **refund)[1]['status'] == 'ignored'
+            assert event('COMPLETED', 0, voucher, type='REFUND', parentOrderId='fixture-voucher', **refund)[1] == {'status': 'refunded', 'changed': True}
+            assert event('COMPLETED', 0, '', type='REFUND', parentOrderId='fixture-voucher', **refund)[1] == {'status': 'ignored', 'changed': False}
+            assert event('COMPLETED', 0, voucher, type='REFUND', parentOrderId='fixture-voucher', **refund)[1] == {'status': 'refunded', 'changed': False}
+            refunded = request(f'status.php?o={voucher}')[1]
+            assert refunded['status'] == 'refunded' and 'vouchers' not in refunded
+            for action in ('redeem', 'unredeem'):
+                code, body, _ = request(f'panel.php?action={action}', redeem, session)
+                assert code == 409 and body['code'] == 'refunded', body
+            assert event('COMPLETED', seeded['voucher']['total'], voucher)[1] == {'status': 'refunded', 'changed': False}
+            with sqlite3.connect(private/'orders.sqlite') as db:
+                subject, body = db.execute('SELECT subject, body FROM mail_outbox WHERE order_external_id=? ORDER BY id DESC LIMIT 1', (voucher,)).fetchone()
+                assert subject.startswith('Zwrot płatności') and voucher_code+' (był już wykorzystany)' in body and 'fixture-voucher-r1' in body
             with urllib.request.urlopen(urllib.request.Request(f'http://127.0.0.1:{port}/heartshop/api/panel.php?action=export', headers=session), timeout=5) as csv:
                 text = csv.read().decode('utf-8-sig')
                 assert csv.headers['Content-Type'].startswith('text/csv') and voucher_code in text and 'buyer@example.invalid' in text
@@ -193,7 +213,7 @@ $statusLookup=function(string $url): array {
             assert fresh.returncode == 0 and fresh.stdout == '', fresh
             subprocess.run(['php', '-r', '$db=new SQLite3($argv[1]);$db->exec("UPDATE mail_outbox SET created_at=created_at-1000");', str(private/'orders.sqlite')], check=True)
             stale = check()
-            assert stale.returncode == 1 and 'Heartshop mail alert for https://staging.shop.example.com: 4 unsent' in stale.stdout, stale
+            assert stale.returncode == 1 and 'Heartshop mail alert for https://staging.shop.example.com: 5 unsent' in stale.stdout, stale
             assert 'buyer@example.invalid' not in stale.stdout and 'Test Buyer' not in stale.stdout
             (private/'mail-worker.err').write_text('Worker failed; inspect protected operator logs\n')
             subprocess.run(['php', '-r', '$db=new SQLite3($argv[1]);$db->exec("UPDATE mail_outbox SET status=\'sent\'");', str(private/'orders.sqlite')], check=True)

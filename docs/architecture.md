@@ -13,7 +13,7 @@ The first standalone version was extracted from the Heartmade website's shop com
 5. A separate worker sends queued email. Paid vouchers are issued one per unit, each with its own number, and found by the buyer email; this distribution has no physical-order export.
 6. The merchant redeems vouchers in the panel; invoice issuance remains outside this project.
 
-SQLite WAL files and private configuration must have owner-only permissions outside the web root. The panel uses a password hash and hashed server-side session tokens. API responses are not cached; order status links are bearer links and must not be shared publicly.
+SQLite WAL files and private configuration must have owner-only permissions outside the web root. The panel uses a password hash and hashed server-side session tokens. A session stays valid for 14 days after the last visit and at most 30 days after login; changing `PANEL_PASSWORD_HASH` ends every open session. API responses are not cached; order status links are bearer links and must not be shared publicly.
 
 ## Standalone changes
 

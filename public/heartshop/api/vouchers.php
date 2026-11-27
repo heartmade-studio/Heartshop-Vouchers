@@ -79,6 +79,7 @@ function setVoucherUsed(mixed $input, bool $used, ?int $now = null): array {
         $v = $s->execute()->fetchArray(SQLITE3_ASSOC);
         $reason = match (true) {
             !$v => 'unknown',
+            $v['order_status'] === 'refunded' => 'refunded',
             $v['order_status'] !== 'paid' => 'not_paid',
             $used && $v['status'] === 'used' => 'already_used',
             !$used && $v['status'] === 'active' => 'not_used',

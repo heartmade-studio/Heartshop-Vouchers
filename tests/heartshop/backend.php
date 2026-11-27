@@ -166,6 +166,14 @@ try {
     check(is_string($token) && panelSessionValid($token,$pnow+60),'right password opens a session');
     check(!str_contains((string)db()->querySingle('SELECT token_hash FROM panel_sessions'),$token),'only a hash of the session token is stored');
     check(!panelSessionValid($token,$pnow+PANEL_TTL+120) && !panelSessionValid(($token[0]==='f' ? 'e' : 'f').substr($token,1),$pnow) && !panelSessionValid(null),'expired, forged and missing sessions refused');
+    $slide=panelLogin('synthetic-panel-pass','203.0.113.9',$pnow);
+    check(panelSessionValid($slide,$pnow+13*86400) && panelSessionValid($slide,$pnow+26*86400)
+        && !panelSessionValid($slide,$pnow+PANEL_MAX_AGE+60),'a used session still ends 30 days after login');
+    $other=panelLogin('synthetic-panel-pass','203.0.113.9',$pnow);
+    db()->exec("UPDATE panel_sessions SET password_fp='".panelPasswordFingerprint('$2y$previous-hash')."' WHERE token_hash='".hash('sha256',$other)."'");
+    check(!panelSessionValid($other,$pnow+60) && panelSessionValid($token,$pnow+60),'a session opened with another password hash is refused');
+    panelLogin('synthetic-panel-pass','203.0.113.9',$pnow);
+    check((int)db()->querySingle("SELECT COUNT(*) FROM panel_sessions WHERE token_hash='".hash('sha256',$other)."'")===0,'login removes sessions of an old password');
     panelLogout($token);
     check(!panelSessionValid($token,$pnow+60),'logout ends the session');
     for($i=0;$i<8;$i++) panelLogin('wrong','203.0.113.5',$pnow);

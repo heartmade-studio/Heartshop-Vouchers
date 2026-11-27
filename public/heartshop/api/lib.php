@@ -76,8 +76,10 @@ function secrets(): array {
     static $env = null;
     if ($env !== null) return $env;
     $values = @parse_ini_file(privatePath(), false, INI_SCANNER_RAW);
+    // PAYMOVE_WEBHOOK_SECRET signs the deprecated PAYMENT subscription, which carries no type or
+    // currency. Remove it once the TRANSACTION subscription is verified; one of the two is required.
     if (!is_array($values) || empty($values['PAYMOVE_API_KEY']) || empty($values['PAYMOVE_PRODUCT_ID'])
-        || empty($values['PAYMOVE_WEBHOOK_SECRET'])) {
+        || (empty($values['PAYMOVE_WEBHOOK_SECRET']) && empty($values['PAYMOVE_TRANSACTION_SECRET']))) {
         throw new RuntimeException('Missing private configuration');
     }
     foreach (['MAIL_FROM','MERCHANT_EMAIL'] as $key) {
