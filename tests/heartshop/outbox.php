@@ -4,6 +4,7 @@ declare(strict_types=1);
 $db = new SQLite3(':memory:'); $db->enableExceptions(true); $db->busyTimeout(100);
 function db(): SQLite3 { global $db; return $db; }
 function paymoveHosts(): array { return ['sandbox'=>true]; }
+function paymentScope(): string { return 'test-scope'; }
 function cfg(): array { return ['shop'=>['name'=>'Shop']]; }
 function secrets(): array { return ['MERCHANT_EMAIL'=>'merchant@example.test']; }
 function orderNumber(int $id): string { return 'T-'.$id; }

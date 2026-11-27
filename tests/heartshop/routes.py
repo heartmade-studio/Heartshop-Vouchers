@@ -148,7 +148,7 @@ $statusLookup=function(string $url): array {
             with sqlite3.connect(private/'orders.sqlite') as db:
                 db.execute('UPDATE signed_completions SET received_at=? WHERE provider_id=?', (receipt, 'fixture-voucher'))
             # A refund before any confirmed payment withdraws nothing.
-            assert event('COMPLETED', 0, voucher, type='REFUND', parentOrderId='fixture-voucher', **transaction)[1] == {'status': 'pending', 'changed': False}
+            assert event('COMPLETED', 0, voucher, type='REFUND', parentOrderId='fixture-other-attempt', **transaction)[1] == {'status': 'pending', 'changed': False}
             assert event('COMPLETED', 0, voucher, type='REFUND', **transaction)[0] == 400  # no parentOrderId
             assert event('COMPLETED', 0, voucher, type='CHARGEBACK', **transaction)[0] == 400
             assert event('COMPLETED', 0, voucher, type='PAYMENT', **dict(transaction, currency='EUR'))[0] == 400
